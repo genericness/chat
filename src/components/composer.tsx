@@ -186,7 +186,7 @@ export function Composer({ convId, className }: ComposerProps) {
             }}
             placeholder={needsPromote ? "Pick a response to continue" : "Ask anything"}
             disabled={needsPromote}
-            className="max-h-44 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-[0.95rem] outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60"
+            className="max-h-44 min-h-8 flex-1 resize-none self-center bg-transparent px-1 py-1 text-[0.95rem] leading-6 outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60"
           />
           <Button
             variant="ghost"

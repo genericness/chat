@@ -32,6 +32,8 @@ export interface CompletionRequest {
   maxTokens?: number
   signal: AbortSignal
   onDelta: (text: string) => void
+  /** Chain-of-thought deltas (`reasoning_content` / `reasoning`), when the model emits them. */
+  onReasoning?: (text: string) => void
 }
 
 function errorMessage(payload: unknown, fallback: string): string {
@@ -91,7 +93,10 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<void
   if (!res.headers.get("content-type")?.includes("text/event-stream")) {
     const json = await res.json()
     if (json.error) throw new ApiError(errorMessage(json, "Request failed"))
-    req.onDelta(json.choices?.[0]?.message?.content ?? "")
+    const message = json.choices?.[0]?.message
+    const reasoning = message?.reasoning_content ?? message?.reasoning
+    if (reasoning) req.onReasoning?.(reasoning)
+    req.onDelta(message?.content ?? "")
     return
   }
 
@@ -107,14 +112,18 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<void
       }
       const obj = json as {
         error?: unknown
-        choices?: { delta?: { content?: string } }[]
+        choices?: {
+          delta?: { content?: string; reasoning_content?: string; reasoning?: string }
+        }[]
       }
       if (obj.error) {
         streamError = errorMessage(obj, "Provider returned an error mid-stream")
         return
       }
-      const delta = obj.choices?.[0]?.delta?.content
-      if (delta) req.onDelta(delta)
+      const delta = obj.choices?.[0]?.delta
+      const reasoning = delta?.reasoning_content ?? delta?.reasoning
+      if (reasoning) req.onReasoning?.(reasoning)
+      if (delta?.content) req.onDelta(delta.content)
     },
   })
 

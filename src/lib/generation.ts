@@ -10,11 +10,18 @@ import {
   type Message,
 } from "@/lib/db"
 import { exaSearch, searchContextBlock } from "@/lib/exa"
-import { streamChatCompletion, type ChatMessage, type ContentPart } from "@/lib/openai"
+import {
+  ApiError,
+  streamChatCompletion,
+  type ChatMessage,
+  type ContentPart,
+} from "@/lib/openai"
 import { activeProfile, getPrefs, type Profile } from "@/lib/profiles"
 
 // Module singleton: survives route changes; Dexie is the source of truth for UI.
 const controllers = new Map<string, AbortController>()
+
+const DEFAULT_MAX_TOKENS = 8192
 
 export function stopGeneration(msgId: string) {
   controllers.get(msgId)?.abort()
@@ -126,38 +133,68 @@ export async function startAssistant(
 
   // Throttled write-through: at most ~10 IDB writes/sec per stream.
   let buf = ""
+  let reasonBuf = ""
   let timer: number | undefined
+  const patch = () => ({ content: buf, reasoning: reasonBuf || undefined })
   const flush = () => {
     timer = undefined
-    void db.messages.update(msg.id, { content: buf })
+    void db.messages.update(msg.id, patch())
+  }
+  const schedule = () => {
+    if (timer === undefined) timer = window.setTimeout(flush, 100)
   }
   const onDelta = (text: string) => {
     buf += text
-    if (timer === undefined) timer = window.setTimeout(flush, 100)
+    schedule()
   }
+  const onReasoning = (text: string) => {
+    reasonBuf += text
+    schedule()
+  }
+
+  const userMax = conv?.settings?.maxTokens
+  const request = (maxTokens?: number) =>
+    streamChatCompletion({
+      baseUrl: opts.profile.baseUrl,
+      apiKey: opts.profile.apiKey,
+      model: opts.model,
+      messages: context,
+      temperature: conv?.settings?.temperature,
+      maxTokens,
+      signal: controller.signal,
+      onDelta,
+      onReasoning,
+    })
 
   void (async () => {
     try {
-      await streamChatCompletion({
-        baseUrl: opts.profile.baseUrl,
-        apiKey: opts.profile.apiKey,
-        model: opts.model,
-        messages: context,
-        temperature: conv?.settings?.temperature,
-        maxTokens: conv?.settings?.maxTokens,
-        signal: controller.signal,
-        onDelta,
-      })
+      try {
+        // Without a generous default, some providers cap output low (Anthropic
+        // compat, Ollama) and cut responses off mid-sentence.
+        await request(userMax ?? DEFAULT_MAX_TOKENS)
+      } catch (err) {
+        // Models that reject the param (over their cap, or want
+        // max_completion_tokens) get one bare retry — only if we defaulted it.
+        const rejected =
+          err instanceof ApiError &&
+          err.status === 400 &&
+          /max_?(completion_)?tokens/i.test(err.message)
+        if (userMax === undefined && rejected && !controller.signal.aborted) {
+          await request(undefined)
+        } else {
+          throw err
+        }
+      }
       window.clearTimeout(timer)
-      await db.messages.update(msg.id, { content: buf, status: "done" })
+      await db.messages.update(msg.id, { ...patch(), status: "done" })
     } catch (err) {
       window.clearTimeout(timer)
       if (controller.signal.aborted) {
-        await db.messages.update(msg.id, { content: buf, status: "stopped" })
+        await db.messages.update(msg.id, { ...patch(), status: "stopped" })
       } else {
         const message = err instanceof Error ? err.message : String(err)
         await db.messages.update(msg.id, {
-          content: buf,
+          ...patch(),
           status: "error",
           error: message,
         })

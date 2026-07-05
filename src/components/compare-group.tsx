@@ -1,7 +1,7 @@
 import { Check, ChevronLeft, ChevronRight, Square } from "lucide-react"
 
 import { Markdown } from "@/components/markdown"
-import { MessageBubble, Sources } from "@/components/message"
+import { MessageBubble, Reasoning, Sources } from "@/components/message"
 import { Button } from "@/components/ui/button"
 import { promoteReply, type Message, type SearchResult } from "@/lib/db"
 import { stopGeneration } from "@/lib/generation"
@@ -31,6 +31,7 @@ function CompareCard({ message }: { message: Message }) {
           <p className="text-sm text-destructive">{message.error}</p>
         ) : (
           <>
+            <Reasoning message={message} />
             <Markdown text={message.content} />
             {message.status === "streaming" && (
               <span className="mt-1 inline-block h-4 w-2 animate-pulse rounded-xs bg-primary/70" />

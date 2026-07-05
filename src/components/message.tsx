@@ -1,12 +1,34 @@
 import { memo, useEffect, useMemo, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
-import { Check, Copy, FileText, Pencil, RefreshCw } from "lucide-react"
+import { Brain, Check, ChevronDown, Copy, FileText, Pencil, RefreshCw } from "lucide-react"
 
 import { Markdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { db, type Message } from "@/lib/db"
 import { editResend, regenerate } from "@/lib/generation"
+
+/** Streamed chain-of-thought: expanded while the model is thinking, collapsed after. */
+export function Reasoning({ message }: { message: Message }) {
+  if (!message.reasoning) return null
+  const thinking = message.status === "streaming" && !message.content
+  return (
+    <details
+      key={thinking ? "live" : "settled"} // remount to collapse once the answer starts
+      open={thinking || undefined}
+      className="group/think my-1 rounded-lg border border-border/50 bg-muted/30 px-3 py-2"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted-foreground select-none [&::-webkit-details-marker]:hidden">
+        <Brain className="size-3.5" />
+        {thinking ? "Thinking…" : "Thought process"}
+        <ChevronDown className="size-3 transition-transform group-open/think:rotate-180" />
+      </summary>
+      <div className="mt-2 border-t border-border/40 pt-2 text-sm **:text-muted-foreground">
+        <Markdown text={message.reasoning} />
+      </div>
+    </details>
+  )
+}
 
 export function Sources({ results }: { results: NonNullable<Message["searchResults"]> }) {
   return (
@@ -156,6 +178,7 @@ export const MessageBubble = memo(function MessageBubble({
       {message.model && (
         <span className="text-xs text-muted-foreground">{message.model}</span>
       )}
+      <Reasoning message={message} />
       <div>
         <Markdown text={message.content} />
         {message.status === "streaming" && (

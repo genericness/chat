@@ -18,15 +18,18 @@ export function ChatPage() {
 
   if (!id) {
     return (
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-8 px-4 pb-16">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(45%_38%_at_50%_60%,color-mix(in_oklch,var(--primary),transparent_84%)_0%,transparent_70%)]"
-        />
-        <h1 className="relative text-center text-3xl font-medium tracking-tight sm:text-4xl">
-          <ShinyText text="Hi, what's on your mind?" />
-        </h1>
-        <Composer className="relative" />
+      <div className="flex flex-1 flex-col items-center justify-center px-4 pb-16">
+        <div className="relative flex w-full flex-col items-center gap-8">
+          {/* glow anchored to the greeting+composer group so it stays centered behind the input */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-1/2 h-[360px] w-[min(92vw,46rem)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-[100px]"
+          />
+          <h1 className="relative text-center text-3xl font-medium tracking-tight sm:text-4xl">
+            <ShinyText text="Hi, what's on your mind?" />
+          </h1>
+          <Composer className="relative" />
+        </div>
       </div>
     )
   }

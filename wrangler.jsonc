@@ -21,7 +21,7 @@
   ],
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "chat-media" }],
   "vars": {
-    "GITHUB_CLIENT_ID": "",
+    "GITHUB_CLIENT_ID": "Ov23lieN0LD75ShVPOjg",
     "APP_BASE_URL": "https://chat.4x.rip"
   },
   "routes": [{ "pattern": "chat.4x.rip", "custom_domain": true }]

@@ -36,6 +36,7 @@ export interface Message {
   model?: string
   profileId?: string
   replyTo?: string
+  reasoning?: string
   active: boolean
   status: MessageStatus
   error?: string

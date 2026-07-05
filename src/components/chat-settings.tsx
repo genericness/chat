@@ -106,7 +106,7 @@ export function ChatSettings({ convId, open, onOpenChange }: ChatSettingsProps) 
                   maxTokens: e.target.value ? Number(e.target.value) : undefined,
                 })
               }
-              placeholder="provider default"
+              placeholder="8192 (default)"
             />
           </div>
 
