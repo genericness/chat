@@ -1,11 +1,13 @@
 import { memo, useEffect, useMemo, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import {
+  ArrowUp,
   Brain,
   Check,
   ChevronDown,
   Copy,
   FileText,
+  LayoutTemplate,
   Loader2,
   Pencil,
   RefreshCw,
@@ -15,9 +17,13 @@ import {
 
 import { Markdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { db, type Message } from "@/lib/db"
+import { answerQuestion } from "@/lib/agent-tools"
+import { db, type Message, type PendingQuestion } from "@/lib/db"
 import { editResend, regenerate } from "@/lib/generation"
+import { openArtifactPanel } from "@/lib/panel"
+import { cn } from "@/lib/utils"
 
 /** Streamed chain-of-thought: expanded while the model is thinking, collapsed after. */
 export function Reasoning({ message }: { message: Message }) {
@@ -38,6 +44,85 @@ export function Reasoning({ message }: { message: Message }) {
         <Markdown text={message.reasoning} streaming={thinking} />
       </div>
     </details>
+  )
+}
+
+export function ArtifactCards({ message }: { message: Message }) {
+  if (!message.artifacts?.length) return null
+  return (
+    <div className="flex flex-wrap gap-2">
+      {message.artifacts.map((a) => (
+        <button
+          key={a.artifactId}
+          className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border/70 bg-card/40 px-3.5 py-2.5 text-left transition-colors hover:border-primary/50 hover:bg-card/60"
+          onClick={() => openArtifactPanel(message.convId, a.artifactId)}
+        >
+          <LayoutTemplate className="size-5 shrink-0 text-primary" />
+          <span className="flex flex-col">
+            <span className="text-sm font-medium">{a.title}</span>
+            <span className="text-xs text-muted-foreground">Click to open preview</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function QuestionCard({ q }: { q: PendingQuestion }) {
+  const [selected, setSelected] = useState<string[]>([])
+  const [text, setText] = useState("")
+
+  const submit = (answer: string) => {
+    if (answer.trim()) answerQuestion(q.toolCallId, answer.trim())
+  }
+
+  return (
+    <div className="flex max-w-xl flex-col gap-3 rounded-xl border border-primary/40 bg-card/60 p-4">
+      <p className="text-sm font-medium">{q.question}</p>
+      {q.options && q.options.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {q.options.map((opt) => (
+            <Button
+              key={opt}
+              variant={selected.includes(opt) ? "secondary" : "outline"}
+              size="sm"
+              className={cn("rounded-full", selected.includes(opt) && "border-primary/50")}
+              onClick={() => {
+                if (q.multiple) {
+                  setSelected((s) =>
+                    s.includes(opt) ? s.filter((x) => x !== opt) : [...s, opt]
+                  )
+                } else {
+                  submit(opt)
+                }
+              }}
+            >
+              {opt}
+            </Button>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-1.5">
+        <Input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit(text || selected.join(", "))
+          }}
+          placeholder={q.multiple ? "Or type an answer…" : "Type an answer…"}
+          className="h-8"
+        />
+        <Button
+          size="icon-sm"
+          className="shrink-0 rounded-full"
+          aria-label="Send answer"
+          disabled={!text.trim() && selected.length === 0}
+          onClick={() => submit(text || selected.join(", "))}
+        >
+          <ArrowUp />
+        </Button>
+      </div>
+    </div>
   )
 }
 
@@ -230,15 +315,22 @@ export const MessageBubble = memo(function MessageBubble({
       {message.toolCalls && message.toolCalls.length > 0 && (
         <ToolChips calls={message.toolCalls} />
       )}
+      <ArtifactCards message={message} />
+      {message.pendingQuestion && message.status === "streaming" && (
+        <QuestionCard key={message.pendingQuestion.toolCallId} q={message.pendingQuestion} />
+      )}
       <div>
         <Markdown
           text={message.content}
           streaming={message.status === "streaming"}
           sources={citeSources}
         />
-        {message.status === "streaming" && !message.content && !message.reasoning && (
-          <span className="mt-1 inline-block h-4 w-2 animate-pulse rounded-xs bg-primary/70" />
-        )}
+        {message.status === "streaming" &&
+          !message.content &&
+          !message.reasoning &&
+          !message.pendingQuestion && (
+            <span className="mt-1 inline-block h-4 w-2 animate-pulse rounded-xs bg-primary/70" />
+          )}
       </div>
       {message.searchResults && message.status !== "streaming" && (
         <Sources results={message.searchResults} />

@@ -1,5 +1,6 @@
 import { toast } from "sonner"
 
+import { AGENT_TOOL_DEFS, AGENT_TOOL_NAMES, executeAgentTool } from "@/lib/agent-tools"
 import type { SearchResult } from "@/lib/db"
 import { exaSearch, searchContextBlock } from "@/lib/exa"
 import { connectMcp, McpAuthRequiredError } from "@/lib/mcp"
@@ -26,9 +27,20 @@ function toastAuthRequired(err: McpAuthRequiredError) {
 export interface GatheredTools {
   defs: ToolDef[]
   /** Executes a tool by its (qualified) name; returns text for the model. */
-  execute: (name: string, argsJson: string, signal: AbortSignal) => Promise<string>
+  execute: (
+    name: string,
+    argsJson: string,
+    signal: AbortSignal,
+    toolCallId: string
+  ) => Promise<string>
   /** web_search results collected along the way, for the sources UI. */
   sources: SearchResult[]
+}
+
+export interface GatherOptions {
+  webSearch: boolean
+  convId: string
+  msgId: string
 }
 
 const WEB_SEARCH_DEF: ToolDef = {
@@ -51,13 +63,13 @@ function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")
 }
 
-export async function gatherTools(includeWebSearch: boolean): Promise<GatheredTools> {
-  const defs: ToolDef[] = []
+export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
+  const defs: ToolDef[] = [...AGENT_TOOL_DEFS]
   const sources: SearchResult[] = []
   // qualified tool name → executor
   const mcpRoutes = new Map<string, (args: unknown, signal: AbortSignal) => Promise<string>>()
 
-  if (includeWebSearch) defs.push(WEB_SEARCH_DEF)
+  if (opts.webSearch) defs.push(WEB_SEARCH_DEF)
 
   for (const server of getPrefs().mcpServers ?? []) {
     if (!server.enabled) continue
@@ -65,7 +77,8 @@ export async function gatherTools(includeWebSearch: boolean): Promise<GatheredTo
       const { conn, tools } = await connectMcp(server)
       for (const tool of tools) {
         const qualified = `${slug(server.name)}__${tool.name}`.slice(0, 64)
-        if (mcpRoutes.has(qualified) || qualified === "web_search") continue
+        if (mcpRoutes.has(qualified) || qualified === "web_search" || AGENT_TOOL_NAMES.has(qualified))
+          continue
         mcpRoutes.set(qualified, (args, signal) => conn.callTool(tool.name, args, signal))
         defs.push({
           type: "function",
@@ -82,7 +95,12 @@ export async function gatherTools(includeWebSearch: boolean): Promise<GatheredTo
     }
   }
 
-  const execute = async (name: string, argsJson: string, signal: AbortSignal) => {
+  const execute = async (
+    name: string,
+    argsJson: string,
+    signal: AbortSignal,
+    toolCallId: string
+  ) => {
     let args: unknown = {}
     try {
       args = argsJson ? JSON.parse(argsJson) : {}
@@ -90,6 +108,14 @@ export async function gatherTools(includeWebSearch: boolean): Promise<GatheredTo
       // pass raw string through so the model can see what went wrong
       args = { input: argsJson }
     }
+
+    const agentResult = await executeAgentTool(name, args as Record<string, unknown>, {
+      convId: opts.convId,
+      msgId: opts.msgId,
+      toolCallId,
+      signal,
+    })
+    if (agentResult !== null) return agentResult
 
     if (name === "web_search") {
       const query = String((args as { query?: unknown }).query ?? "")

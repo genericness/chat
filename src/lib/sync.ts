@@ -50,7 +50,11 @@ async function pullAttachments(convId: string, messages: Message[]) {
 }
 
 async function push(conv: Conversation) {
-  const messages = await db.messages.where("convId").equals(conv.id).sortBy("seq")
+  // D1 caps rows at ~2MB; drop oversized messages (giant artifacts/pastes)
+  // from sync rather than failing the whole conversation.
+  const messages = (await db.messages.where("convId").equals(conv.id).sortBy("seq")).filter(
+    (m) => JSON.stringify(m).length < 1_500_000
+  )
   const res = await fetch(`/api/sync/chats/${conv.id}`, {
     method: "PUT",
     credentials: "same-origin",

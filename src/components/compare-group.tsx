@@ -1,7 +1,14 @@
 import { Check, ChevronLeft, ChevronRight, Square } from "lucide-react"
 
 import { Markdown } from "@/components/markdown"
-import { MessageBubble, Reasoning, Sources, ToolChips } from "@/components/message"
+import {
+  ArtifactCards,
+  MessageBubble,
+  QuestionCard,
+  Reasoning,
+  Sources,
+  ToolChips,
+} from "@/components/message"
 import { Button } from "@/components/ui/button"
 import { promoteReply, type Message, type SearchResult } from "@/lib/db"
 import { stopGeneration } from "@/lib/generation"
@@ -42,6 +49,15 @@ function CompareCard({
             {message.toolCalls && message.toolCalls.length > 0 && (
               <div className="mb-2">
                 <ToolChips calls={message.toolCalls} />
+              </div>
+            )}
+            <ArtifactCards message={message} />
+            {message.pendingQuestion && message.status === "streaming" && (
+              <div className="my-2">
+                <QuestionCard
+                  key={message.pendingQuestion.toolCallId}
+                  q={message.pendingQuestion}
+                />
               </div>
             )}
             <Markdown

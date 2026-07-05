@@ -1,6 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks"
 import { useParams } from "react-router-dom"
 
+import { ArtifactPanel } from "@/components/artifact-panel"
 import { Composer } from "@/components/composer"
 import { MessageList } from "@/components/message-list"
 import { ShinyText } from "@/components/shiny-text"
@@ -35,11 +36,14 @@ export function ChatPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <MessageList messages={messages ?? []} />
-      <div className="flex justify-center px-4 pb-4">
-        <Composer convId={id} />
+    <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <MessageList messages={messages ?? []} />
+        <div className="flex justify-center px-4 pb-4">
+          <Composer convId={id} />
+        </div>
       </div>
+      <ArtifactPanel convId={id} />
     </div>
   )
 }

@@ -26,7 +26,8 @@ import { gatherTools } from "@/lib/tools"
 const controllers = new Map<string, AbortController>()
 
 const DEFAULT_MAX_TOKENS = 8192
-const MAX_TOOL_ROUNDS = 5
+// Generous: agentic builds chain ask → create → edit → edit → … before answering.
+const MAX_TOOL_ROUNDS = 12
 
 function lastUserText(transcript: ChatMessage[]): string {
   for (let i = transcript.length - 1; i >= 0; i--) {
@@ -233,7 +234,7 @@ export async function startAssistant(
       )
       const toolsAllowed = meta?.supportsTools !== false
       const gathered = toolsAllowed
-        ? await gatherTools(!!opts.webSearch)
+        ? await gatherTools({ webSearch: !!opts.webSearch, convId, msgId: msg.id })
         : { defs: [], execute: async () => "", sources: [] as NonNullable<Message["searchResults"]> }
 
       // Metadata says no tools but search was requested → classic inject mode.
@@ -294,7 +295,8 @@ export async function startAssistant(
             output = await gathered.execute(
               tc.function.name,
               tc.function.arguments,
-              controller.signal
+              controller.signal,
+              tc.id
             )
             if (entry) entry.status = "done"
           } catch (err) {
@@ -316,13 +318,18 @@ export async function startAssistant(
     } catch (err) {
       window.clearTimeout(timer)
       if (controller.signal.aborted) {
-        await db.messages.update(msg.id, { ...patch(), status: "stopped" })
+        await db.messages.update(msg.id, {
+          ...patch(),
+          status: "stopped",
+          pendingQuestion: undefined,
+        })
       } else {
         const message = err instanceof Error ? err.message : String(err)
         await db.messages.update(msg.id, {
           ...patch(),
           status: "error",
           error: message,
+          pendingQuestion: undefined,
         })
         toast.error(message)
       }

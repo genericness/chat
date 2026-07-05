@@ -32,6 +32,20 @@ export interface ToolCallRecord {
   status: "running" | "done" | "error"
 }
 
+/** Full artifact state as of this message — latest snapshot in the thread wins. */
+export interface ArtifactSnapshot {
+  artifactId: string
+  title: string
+  html: string
+}
+
+export interface PendingQuestion {
+  toolCallId: string
+  question: string
+  options?: string[]
+  multiple?: boolean
+}
+
 export interface Message {
   id: string
   convId: string
@@ -45,6 +59,8 @@ export interface Message {
   replyTo?: string
   reasoning?: string
   toolCalls?: ToolCallRecord[]
+  artifacts?: ArtifactSnapshot[]
+  pendingQuestion?: PendingQuestion
   active: boolean
   status: MessageStatus
   error?: string
