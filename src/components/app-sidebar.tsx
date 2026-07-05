@@ -158,7 +158,7 @@ export function AppSidebar({
                           <Button
                             variant="ghost"
                             size="icon-xs"
-                            className="mr-1 opacity-0 group-hover/row:opacity-100 aria-expanded:opacity-100"
+                            className="mr-1 opacity-0 group-hover/row:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
                             aria-label="Chat actions"
                           >
                             <MoreHorizontal />
@@ -189,7 +189,7 @@ export function AppSidebar({
           </ScrollArea>
         </div>
 
-        <div className="border-t border-sidebar-border p-2">
+        <div className="border-t border-sidebar-border p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           <Button
             variant="ghost"
             className="w-full justify-start gap-2"

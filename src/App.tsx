@@ -45,7 +45,7 @@ export function App() {
         onOpenSearch={() => setSearchOpen(true)}
       />
       <main className="relative flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center p-2 md:hidden">
+        <div className="flex items-center p-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
           <Button
             variant="ghost"
             size="icon"

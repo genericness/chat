@@ -295,7 +295,7 @@ export const MessageBubble = memo(function MessageBubble({
             {message.content}
           </div>
         )}
-        <div className="flex opacity-0 transition-opacity group-hover/msg:opacity-100">
+        <div className="flex opacity-0 transition-opacity group-hover/msg:opacity-100 pointer-coarse:opacity-100">
           <CopyButton text={message.content} />
           <Button
             variant="ghost"
@@ -349,7 +349,7 @@ export const MessageBubble = memo(function MessageBubble({
         </p>
       )}
       {message.status !== "streaming" && (
-        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/msg:opacity-100">
+        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/msg:opacity-100 pointer-coarse:opacity-100">
           <CopyButton text={message.content} />
           {canRegenerate && (
             <Button

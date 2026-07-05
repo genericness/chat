@@ -80,7 +80,7 @@ export function ModelPicker({ profile }: { profile?: Profile }) {
           <Button
             variant="ghost"
             size="sm"
-            className="max-w-44 shrink-0 gap-1 rounded-full text-muted-foreground"
+            className="max-w-28 shrink-0 gap-1 rounded-full text-muted-foreground sm:max-w-44"
           >
             <span className="truncate">{chipLabel}</span>
             <ChevronDown className="size-3.5 shrink-0" />

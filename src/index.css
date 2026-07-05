@@ -199,6 +199,17 @@
   background: transparent !important;
 }
 
+/* Wide markdown content scrolls instead of overflowing narrow screens */
+.prose table {
+  display: block;
+  overflow-x: auto;
+}
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 2px;
+}
+
 /* Inline [n] citations linking to web-search sources */
 .prose a.citation {
   color: var(--primary);

@@ -148,7 +148,7 @@ export function Composer({ convId, className }: ComposerProps) {
             ))}
           </div>
         )}
-        <div className="flex items-end gap-1.5">
+        <div className="flex items-end gap-1 sm:gap-1.5">
           <input
             ref={fileInput}
             type="file"
@@ -186,7 +186,7 @@ export function Composer({ convId, className }: ComposerProps) {
             }}
             placeholder={needsPromote ? "Pick a response to continue" : "Ask anything"}
             disabled={needsPromote}
-            className="max-h-44 min-h-8 flex-1 resize-none self-center bg-transparent px-1 py-1 text-[0.95rem] leading-6 outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60"
+            className="max-h-44 min-h-8 flex-1 resize-none self-center bg-transparent px-1 py-1 text-base leading-6 outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60 sm:text-[0.95rem]"
           />
           <Button
             variant="ghost"
@@ -205,7 +205,7 @@ export function Composer({ convId, className }: ComposerProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="shrink-0 rounded-full text-muted-foreground"
+              className="hidden shrink-0 rounded-full text-muted-foreground sm:flex"
               aria-label="Chat settings"
               onClick={() => setChatSettingsOpen(true)}
             >

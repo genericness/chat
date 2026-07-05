@@ -37,7 +37,7 @@ export function ArtifactPanel({ convId }: { convId: string }) {
 
   return (
     <aside className="fixed inset-0 z-40 flex flex-col bg-background md:static md:z-auto md:w-[46%] md:min-w-96 md:border-l md:border-border">
-      <div className="flex items-center gap-1 border-b border-border px-3 py-2">
+      <div className="flex items-center gap-1 border-b border-border px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:pt-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
           {artifact.title}
         </span>

@@ -39,7 +39,7 @@ export function ChatPage() {
     <div className="flex flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
         <MessageList messages={messages ?? []} />
-        <div className="flex justify-center px-4 pb-4">
+        <div className="flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <Composer convId={id} />
         </div>
       </div>
