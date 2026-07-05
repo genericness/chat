@@ -31,16 +31,21 @@ export async function stopConversation(convId: string) {
 function resolveTarget(conv: Conversation | undefined): {
   profile: Profile
   model: string
+  models: string[]
 } {
   const prefs = getPrefs()
   const profile =
     prefs.profiles.find((p) => p.id === conv?.settings?.profileId) ??
     activeProfile(prefs)
   if (!profile) throw new Error("Add an endpoint in Settings first.")
-  const model =
-    conv?.settings?.model ?? prefs.selectedModels?.[0] ?? profile.defaultModel
-  if (!model) throw new Error(`Pick a model for “${profile.name}” first.`)
-  return { profile, model }
+  // A per-conversation override pins a single model; otherwise the picker
+  // selection applies, and 2+ picked models means compare mode.
+  const models = conv?.settings?.model
+    ? [conv.settings.model]
+    : [...new Set(prefs.selectedModels ?? [])]
+  if (!models.length && profile.defaultModel) models.push(profile.defaultModel)
+  if (!models.length) throw new Error(`Pick a model for “${profile.name}” first.`)
+  return { profile, model: models[0], models }
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -246,6 +251,17 @@ export async function sendMessage(
   }
   await db.messages.add(userMsg)
 
-  await startAssistant(conv.id, userMsg.id, { ...target, active: true })
+  if (target.models.length > 1) {
+    // Compare: all candidates start inactive; the user promotes one to continue.
+    for (const model of target.models) {
+      await startAssistant(conv.id, userMsg.id, {
+        profile: target.profile,
+        model,
+        active: false,
+      })
+    }
+  } else {
+    await startAssistant(conv.id, userMsg.id, { ...target, active: true })
+  }
   return conv.id
 }

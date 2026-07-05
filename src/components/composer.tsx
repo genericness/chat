@@ -46,6 +46,22 @@ export function Composer({ convId, className }: ComposerProps) {
   )
   const isStreaming = (streaming?.length ?? 0) > 0
 
+  // Compare mode: after all candidates settle with none promoted, block sending
+  // until the user picks a response to continue the thread from.
+  const needsPromote = useLiveQuery(async () => {
+    if (!convId) return false
+    const msgs = await db.messages.where("convId").equals(convId).sortBy("seq")
+    const lastUser = [...msgs].reverse().find((m) => m.role === "user")
+    if (!lastUser) return false
+    const replies = msgs.filter((m) => m.replyTo === lastUser.id)
+    return (
+      replies.length > 1 &&
+      !replies.some((r) => r.active) &&
+      replies.every((r) => r.status !== "streaming") &&
+      replies.some((r) => r.status === "done" || r.status === "stopped")
+    )
+  }, [convId])
+
   const addFiles = (files: FileList | File[]) => {
     const next: Pending[] = []
     for (const file of files) {
@@ -68,7 +84,7 @@ export function Composer({ convId, className }: ComposerProps) {
 
   const send = async () => {
     const t = text.trim()
-    if ((!t && pending.length === 0) || isStreaming) return
+    if ((!t && pending.length === 0) || isStreaming || needsPromote) return
     setText("")
     const files = pending.map((p) => p.file)
     pending.forEach((p) => p.url && URL.revokeObjectURL(p.url))
@@ -154,8 +170,9 @@ export function Composer({ convId, className }: ComposerProps) {
                 addFiles(e.clipboardData.files)
               }
             }}
-            placeholder="Ask anything"
-            className="max-h-44 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-[0.95rem] outline-none field-sizing-content placeholder:text-muted-foreground"
+            placeholder={needsPromote ? "Pick a response to continue" : "Ask anything"}
+            disabled={needsPromote}
+            className="max-h-44 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-[0.95rem] outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60"
           />
           {convId && (
             <Button
@@ -183,7 +200,7 @@ export function Composer({ convId, className }: ComposerProps) {
             <Button
               size="icon"
               className="shrink-0 rounded-full"
-              disabled={!text.trim() && pending.length === 0}
+              disabled={(!text.trim() && pending.length === 0) || !!needsPromote}
               onClick={() => void send()}
               aria-label="Send"
             >

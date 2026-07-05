@@ -101,6 +101,16 @@ export async function nextSeq(convId: string): Promise<number> {
   return (last?.seq ?? -1) + 1
 }
 
+/** Make one reply the active branch among all siblings answering the same user message. */
+export async function promoteReply(msgId: string) {
+  const msg = await db.messages.get(msgId)
+  if (!msg?.replyTo) return
+  await db.transaction("rw", db.messages, async () => {
+    await db.messages.where("replyTo").equals(msg.replyTo!).modify({ active: false })
+    await db.messages.update(msgId, { active: true })
+  })
+}
+
 /** Recover messages stranded in "streaming" by a closed tab. Run once on boot. */
 export async function runJanitor() {
   await db.messages.where("status").equals("streaming").modify({ status: "stopped" })
