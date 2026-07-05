@@ -11,9 +11,11 @@ import "./index.css"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { runJanitor } from "@/lib/db"
+import { initSync } from "@/lib/sync"
 import { router } from "@/router"
 
 void runJanitor()
+initSync()
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },

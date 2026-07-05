@@ -1,0 +1,120 @@
+import { db, type Conversation, type Message } from "@/lib/db"
+import { getPrefs, setPrefs } from "@/lib/profiles"
+
+// Opt-in, conversation-granularity, last-write-wins by updatedAt.
+// Profiles and API keys never leave localStorage.
+
+let timer: number | undefined
+let running = false
+let applying = false // suppress re-scheduling while we write pulled data
+
+export function scheduleSync(delayMs = 15_000) {
+  if (!getPrefs().syncEnabled || applying) return
+  window.clearTimeout(timer)
+  timer = window.setTimeout(() => void runSync(), delayMs)
+}
+
+async function push(conv: Conversation) {
+  const messages = await db.messages.where("convId").equals(conv.id).sortBy("seq")
+  const res = await fetch(`/api/sync/chats/${conv.id}`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ conversation: conv, messages }),
+  })
+  if (res.status === 409) await pull(conv.id) // remote is newer — take it
+}
+
+async function pull(id: string) {
+  const res = await fetch(`/api/sync/chats/${id}`, { credentials: "same-origin" })
+  if (!res.ok) return
+  const { conversation, messages } = (await res.json()) as {
+    conversation: Conversation
+    messages: Message[]
+  }
+  applying = true
+  try {
+    await db.transaction("rw", db.conversations, db.messages, async () => {
+      // Never clobber a conversation that is generating right now.
+      const busy = await db.messages
+        .where("status")
+        .equals("streaming")
+        .filter((m) => m.convId === id)
+        .count()
+      if (busy > 0) return
+      await db.conversations.put(conversation)
+      await db.messages.where("convId").equals(id).delete()
+      await db.messages.bulkPut(messages)
+    })
+  } finally {
+    applying = false
+  }
+}
+
+export async function runSync(): Promise<void> {
+  if (running || !getPrefs().syncEnabled) return
+  running = true
+  try {
+    const res = await fetch("/api/sync/manifest", { credentials: "same-origin" })
+    if (res.status === 401) {
+      // Signed out: sync stays enabled in prefs but cannot run.
+      return
+    }
+    if (!res.ok) return
+    const { items } = (await res.json()) as {
+      items: { id: string; updatedAt: number; deleted: boolean }[]
+    }
+    const remote = new Map(items.map((i) => [i.id, i]))
+    const local = await db.conversations.toArray()
+    const localById = new Map(local.map((c) => [c.id, c]))
+
+    for (const conv of local) {
+      const r = remote.get(conv.id)
+      if (conv.deletedAt) {
+        if (r && !r.deleted) {
+          await fetch(`/api/sync/chats/${conv.id}`, {
+            method: "DELETE",
+            credentials: "same-origin",
+          })
+        }
+        await db.conversations.delete(conv.id) // purge the local tombstone
+        continue
+      }
+      if (!r || conv.updatedAt > r.updatedAt) await push(conv)
+    }
+
+    for (const [id, r] of remote) {
+      const l = localById.get(id)
+      if (r.deleted) {
+        if (l && !l.deletedAt) {
+          applying = true
+          try {
+            await db.transaction("rw", db.conversations, db.messages, db.attachments, async () => {
+              await db.messages.where("convId").equals(id).delete()
+              await db.attachments.where("convId").equals(id).delete()
+              await db.conversations.delete(id)
+            })
+          } finally {
+            applying = false
+          }
+        }
+        continue
+      }
+      if (!l || r.updatedAt > l.updatedAt) await pull(id)
+    }
+    setPrefs({ lastSyncAt: Date.now() })
+  } finally {
+    running = false
+  }
+}
+
+/** Call once on boot: mutation hooks + focus trigger + initial run. */
+export function initSync() {
+  for (const table of [db.conversations, db.messages]) {
+    table.hook("creating", () => scheduleSync())
+    table.hook("updating", () => scheduleSync())
+    table.hook("deleting", () => scheduleSync())
+  }
+  window.addEventListener("focus", () => scheduleSync(500))
+  scheduleSync(1000)
+}

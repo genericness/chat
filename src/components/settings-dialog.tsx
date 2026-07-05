@@ -22,7 +22,9 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { runSync } from "@/lib/sync"
 import {
   normalizeBaseUrl,
   PRESETS,
@@ -42,6 +44,7 @@ const EMPTY_DRAFT = { name: "", baseUrl: "", apiKey: "", defaultModel: "" }
 function AccountSection() {
   const { data: me, isLoading } = useMe()
   const logout = useLogout()
+  const prefs = usePrefs()
 
   return (
     <div className="grid gap-1.5">
@@ -49,19 +52,39 @@ function AccountSection() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">…</p>
       ) : me ? (
-        <div className="flex items-center gap-2.5 rounded-lg border border-border/70 bg-card/40 px-3 py-2">
-          <img
-            src={me.avatarUrl}
-            alt={me.login}
-            className="size-7 rounded-full"
-          />
-          <span className="min-w-0 flex-1 truncate text-sm">
-            {me.name ?? me.login}
-            <span className="text-muted-foreground"> · @{me.login}</span>
-          </span>
-          <Button variant="ghost" size="sm" onClick={() => void logout()}>
-            Sign out
-          </Button>
+        <div className="flex flex-col gap-2 rounded-lg border border-border/70 bg-card/40 px-3 py-2">
+          <div className="flex items-center gap-2.5">
+            <img
+              src={me.avatarUrl}
+              alt={me.login}
+              className="size-7 rounded-full"
+            />
+            <span className="min-w-0 flex-1 truncate text-sm">
+              {me.name ?? me.login}
+              <span className="text-muted-foreground"> · @{me.login}</span>
+            </span>
+            <Button variant="ghost" size="sm" onClick={() => void logout()}>
+              Sign out
+            </Button>
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-2">
+            <div className="flex flex-col">
+              <span className="text-sm">Sync chats to this account</span>
+              <span className="text-xs text-muted-foreground">
+                {prefs.syncEnabled && prefs.lastSyncAt
+                  ? `Last synced ${new Date(prefs.lastSyncAt).toLocaleTimeString()}`
+                  : "Endpoints and API keys are never synced."}
+              </span>
+            </div>
+            <Switch
+              checked={!!prefs.syncEnabled}
+              onCheckedChange={(on) => {
+                setPrefs({ syncEnabled: on })
+                if (on) void runSync()
+              }}
+              aria-label="Sync chats"
+            />
+          </div>
         </div>
       ) : (
         <>

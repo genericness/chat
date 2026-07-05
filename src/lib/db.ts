@@ -89,10 +89,17 @@ export async function renameConversation(id: string, title: string) {
 }
 
 export async function deleteConversation(id: string) {
+  // With sync on, keep a tombstone row so the delete propagates; the sync
+  // loop purges it after telling the server.
+  const { getPrefs } = await import("@/lib/profiles")
   await db.transaction("rw", db.conversations, db.messages, db.attachments, async () => {
     await db.messages.where("convId").equals(id).delete()
     await db.attachments.where("convId").equals(id).delete()
-    await db.conversations.delete(id)
+    if (getPrefs().syncEnabled) {
+      await db.conversations.update(id, { deletedAt: Date.now(), updatedAt: Date.now() })
+    } else {
+      await db.conversations.delete(id)
+    }
   })
 }
 

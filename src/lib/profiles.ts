@@ -14,6 +14,8 @@ export interface Prefs {
   selectedModels?: string[]
   globalSystemPrompt?: string
   exaKey?: string
+  syncEnabled?: boolean
+  lastSyncAt?: number
 }
 
 export interface Preset {
