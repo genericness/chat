@@ -271,6 +271,22 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               </div>
             </div>
           )}
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="exa-key">Exa API key (web search)</Label>
+            <Input
+              id="exa-key"
+              type="password"
+              value={prefs.exaKey ?? ""}
+              onChange={(e) => setPrefs({ exaKey: e.target.value || undefined })}
+              placeholder="exa-…"
+            />
+            <p className="text-xs text-muted-foreground">
+              Stored in this browser only. Sent per-request through this app's
+              proxy (Exa blocks direct browser calls) — never stored or logged
+              server-side.
+            </p>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -1,9 +1,9 @@
 import { Check, ChevronLeft, ChevronRight, Square } from "lucide-react"
 
 import { Markdown } from "@/components/markdown"
-import { MessageBubble } from "@/components/message"
+import { MessageBubble, Sources } from "@/components/message"
 import { Button } from "@/components/ui/button"
-import { promoteReply, type Message } from "@/lib/db"
+import { promoteReply, type Message, type SearchResult } from "@/lib/db"
 import { stopGeneration } from "@/lib/generation"
 import { cn } from "@/lib/utils"
 
@@ -62,26 +62,38 @@ function CompareCard({ message }: { message: Message }) {
 export function ReplyGroup({
   group,
   canRegenerate,
+  sources,
 }: {
   group: Message[]
   canRegenerate: boolean
+  sources?: SearchResult[]
 }) {
+  const footer = sources?.length ? <Sources results={sources} /> : null
+
   if (group.length === 1) {
-    return <MessageBubble message={group[0]} canRegenerate={canRegenerate} />
+    return (
+      <div className="flex flex-col gap-2">
+        <MessageBubble message={group[0]} canRegenerate={canRegenerate} />
+        {footer}
+      </div>
+    )
   }
 
   const active = group.find((m) => m.active)
   if (!active) {
     return (
-      <div
-        className={cn(
-          "grid gap-3",
-          group.length === 2 ? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3"
-        )}
-      >
-        {group.map((m) => (
-          <CompareCard key={m.id} message={m} />
-        ))}
+      <div className="flex flex-col gap-2">
+        <div
+          className={cn(
+            "grid gap-3",
+            group.length === 2 ? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3"
+          )}
+        >
+          {group.map((m) => (
+            <CompareCard key={m.id} message={m} />
+          ))}
+        </div>
+        {footer}
       </div>
     )
   }
@@ -90,6 +102,7 @@ export function ReplyGroup({
   return (
     <div className="flex flex-col gap-1">
       <MessageBubble message={active} canRegenerate={canRegenerate} />
+      {footer}
       <div className="flex items-center gap-1 text-xs text-muted-foreground">
         <Button
           variant="ghost"

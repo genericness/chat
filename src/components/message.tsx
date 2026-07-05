@@ -8,6 +8,26 @@ import { Textarea } from "@/components/ui/textarea"
 import { db, type Message } from "@/lib/db"
 import { editResend, regenerate } from "@/lib/generation"
 
+export function Sources({ results }: { results: NonNullable<Message["searchResults"]> }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {results.map((r, i) => (
+        <a
+          key={r.url + i}
+          href={r.url}
+          target="_blank"
+          rel="noreferrer"
+          title={r.title}
+          className="flex max-w-56 items-center gap-1.5 rounded-full border border-border/70 bg-card/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+        >
+          <span className="shrink-0 font-mono text-primary">[{i + 1}]</span>
+          <span className="truncate">{new URL(r.url).hostname.replace(/^www\./, "")}</span>
+        </a>
+      ))}
+    </div>
+  )
+}
+
 function AttachmentThumbs({ ids }: { ids: string[] }) {
   const atts = useLiveQuery(
     async () => (await db.attachments.bulkGet(ids)).filter((a) => a !== undefined),

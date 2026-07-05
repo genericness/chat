@@ -9,6 +9,7 @@ import {
   type Conversation,
   type Message,
 } from "@/lib/db"
+import { exaSearch, searchContextBlock } from "@/lib/exa"
 import { streamChatCompletion, type ChatMessage, type ContentPart } from "@/lib/openai"
 import { activeProfile, getPrefs, type Profile } from "@/lib/profiles"
 
@@ -59,11 +60,13 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
 /** Images become OpenAI multimodal parts; other files are inlined as fenced text. */
 async function userContent(m: Message): Promise<string | ContentPart[]> {
-  if (!m.attachmentIds?.length) return m.content
+  let text = m.content
+  // Search results captured at send time replay deterministically on regen/edit.
+  if (m.searchResults?.length) text += searchContextBlock(m.searchResults)
+  if (!m.attachmentIds?.length) return text
   const atts = (await db.attachments.bulkGet(m.attachmentIds)).filter(
     (a) => a !== undefined
   )
-  let text = m.content
   const imageParts: ContentPart[] = []
   for (const a of atts) {
     if (a.mime.startsWith("image/")) {
@@ -215,10 +218,14 @@ export async function editResend(userMsgId: string, newText: string) {
 export async function sendMessage(
   convId: string | null,
   text: string,
-  files: File[] = []
+  files: File[] = [],
+  opts: { webSearch?: boolean } = {}
 ): Promise<string> {
   let conv = convId ? await db.conversations.get(convId) : undefined
   const target = resolveTarget(conv) // throws before any writes if unconfigured
+
+  // Search before any writes so a failed search aborts the send cleanly.
+  const searchResults = opts.webSearch ? await exaSearch(text) : undefined
 
   if (!conv) {
     conv = await createConversation(text)
@@ -245,6 +252,7 @@ export async function sendMessage(
     role: "user",
     content: text,
     attachmentIds: attachmentIds.length ? attachmentIds : undefined,
+    searchResults: searchResults?.length ? searchResults : undefined,
     active: true,
     status: "done",
     createdAt: Date.now(),

@@ -1,6 +1,15 @@
 import { useRef, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
-import { ArrowUp, FileText, Plus, SlidersHorizontal, Square, X } from "lucide-react"
+import {
+  ArrowUp,
+  FileText,
+  Globe,
+  Loader2,
+  Plus,
+  SlidersHorizontal,
+  Square,
+  X,
+} from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -28,6 +37,8 @@ export function Composer({ convId, className }: ComposerProps) {
   const [text, setText] = useState("")
   const [pending, setPending] = useState<Pending[]>([])
   const [chatSettingsOpen, setChatSettingsOpen] = useState(false)
+  const [webSearch, setWebSearch] = useState(false)
+  const [sending, setSending] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const prefs = usePrefs()
@@ -84,17 +95,20 @@ export function Composer({ convId, className }: ComposerProps) {
 
   const send = async () => {
     const t = text.trim()
-    if ((!t && pending.length === 0) || isStreaming || needsPromote) return
+    if ((!t && pending.length === 0) || isStreaming || needsPromote || sending) return
     setText("")
     const files = pending.map((p) => p.file)
     pending.forEach((p) => p.url && URL.revokeObjectURL(p.url))
     setPending([])
+    setSending(true)
     try {
-      const id = await sendMessage(convId ?? null, t, files)
+      const id = await sendMessage(convId ?? null, t, files, { webSearch })
       if (!convId) navigate(`/c/${id}`)
     } catch (err) {
       setText(t)
       toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSending(false)
     }
   }
 
@@ -174,6 +188,19 @@ export function Composer({ convId, className }: ComposerProps) {
             disabled={needsPromote}
             className="max-h-44 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-[0.95rem] outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60"
           />
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "shrink-0 rounded-full text-muted-foreground",
+              webSearch && "bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary"
+            )}
+            aria-label={webSearch ? "Web search on" : "Web search off"}
+            aria-pressed={webSearch}
+            onClick={() => setWebSearch((v) => !v)}
+          >
+            <Globe className="size-4" />
+          </Button>
           {convId && (
             <Button
               variant="ghost"
@@ -200,11 +227,15 @@ export function Composer({ convId, className }: ComposerProps) {
             <Button
               size="icon"
               className="shrink-0 rounded-full"
-              disabled={(!text.trim() && pending.length === 0) || !!needsPromote}
+              disabled={(!text.trim() && pending.length === 0) || !!needsPromote || sending}
               onClick={() => void send()}
               aria-label="Send"
             >
-              <ArrowUp className="size-5" />
+              {sending ? (
+                <Loader2 className="size-5 animate-spin" />
+              ) : (
+                <ArrowUp className="size-5" />
+              )}
             </Button>
           )}
         </div>

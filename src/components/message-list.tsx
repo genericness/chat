@@ -19,7 +19,9 @@ export function MessageList({ messages }: { messages: Message[] }) {
   // Group assistant replies by the user message they answer.
   const items: Item[] = []
   const groups = new Map<string, Message[]>()
+  const userById = new Map<string, Message>()
   for (const m of messages) {
+    if (m.role === "user") userById.set(m.id, m)
     if (m.role === "assistant" && m.replyTo) {
       let g = groups.get(m.replyTo)
       if (!g) {
@@ -52,6 +54,7 @@ export function MessageList({ messages }: { messages: Message[] }) {
               key={item.key}
               group={item.group}
               canRegenerate={item.group[0]?.replyTo === lastUserId}
+              sources={userById.get(item.group[0]?.replyTo ?? "")?.searchResults}
             />
           )
         )}
