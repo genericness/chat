@@ -2,6 +2,7 @@ import { useLiveQuery } from "dexie-react-hooks"
 import { useParams } from "react-router-dom"
 
 import { Composer } from "@/components/composer"
+import { MessageList } from "@/components/message-list"
 import { ShinyText } from "@/components/shiny-text"
 import { db, type Message } from "@/lib/db"
 
@@ -32,17 +33,9 @@ export function ChatPage() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6">
-          {messages?.map((m) => (
-            <p key={m.id} className="text-sm">
-              {m.content}
-            </p>
-          ))}
-        </div>
-      </div>
+      <MessageList messages={messages ?? []} />
       <div className="flex justify-center px-4 pb-4">
-        <Composer />
+        <Composer convId={id} />
       </div>
     </div>
   )
