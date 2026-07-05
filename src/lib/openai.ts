@@ -40,6 +40,7 @@ export interface CompletionRequest {
   model: string
   messages: ChatMessage[]
   tools?: ToolDef[]
+  toolChoice?: { type: "function"; function: { name: string } }
   temperature?: number
   maxTokens?: number
   signal: AbortSignal
@@ -105,6 +106,7 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<Comp
         messages: req.messages,
         stream: true,
         ...(req.tools?.length && { tools: req.tools }),
+        ...(req.toolChoice && { tool_choice: req.toolChoice }),
         ...(req.temperature !== undefined && { temperature: req.temperature }),
         ...(req.maxTokens !== undefined && { max_tokens: req.maxTokens }),
       }),

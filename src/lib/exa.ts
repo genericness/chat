@@ -4,6 +4,7 @@ import { getPrefs } from "@/lib/profiles"
 export async function exaSearch(query: string): Promise<SearchResult[]> {
   const key = getPrefs().exaKey
   if (!key) throw new Error("Add your Exa API key in Settings to use web search.")
+  if (!query.trim()) throw new Error("Web search needs some text to search for.")
 
   const res = await fetch("/api/exa/search", {
     method: "POST",

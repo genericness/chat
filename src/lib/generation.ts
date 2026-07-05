@@ -221,7 +221,8 @@ export async function startAssistant(
   const userMax = conv?.settings?.maxTokens
   const requestRound = async (
     transcript: ChatMessage[],
-    tools: ToolDef[]
+    tools: ToolDef[],
+    toolChoice?: { type: "function"; function: { name: string } }
   ): Promise<CompletionResult> => {
     const doRequest = (maxTokens?: number) =>
       streamChatCompletion({
@@ -230,6 +231,7 @@ export async function startAssistant(
         model: opts.model,
         messages: transcript,
         tools: tools.length ? tools : undefined,
+        toolChoice: tools.length ? toolChoice : undefined,
         temperature: conv?.settings?.temperature,
         maxTokens,
         signal: controller.signal,
@@ -268,9 +270,12 @@ export async function startAssistant(
 
       // Metadata says no tools but search was requested → classic inject mode.
       if (!toolsAllowed && opts.webSearch) {
-        const results = await exaSearch(lastUserText(context))
-        injectSearchResults(context, results)
-        gathered.sources.push(...results)
+        const query = lastUserText(context)
+        if (query.trim()) {
+          const results = await exaSearch(query)
+          injectSearchResults(context, results)
+          gathered.sources.push(...results)
+        }
       }
 
       const transcript: ChatMessage[] = [...context]
@@ -279,9 +284,20 @@ export async function startAssistant(
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         roundBuf = ""
         if (round === MAX_TOOL_ROUNDS - 1) tools = [] // force a final text answer
+        // The search toggle should mean search actually happens: force the
+        // web_search call on the first round (models with an image to look at
+        // otherwise tend to skip it). Later rounds are the model's choice.
+        const forceSearch =
+          round === 0 &&
+          !!opts.webSearch &&
+          tools.some((t) => t.function.name === "web_search")
         let result: CompletionResult
         try {
-          result = await requestRound(transcript, tools)
+          result = await requestRound(
+            transcript,
+            tools,
+            forceSearch ? { type: "function", function: { name: "web_search" } } : undefined
+          )
         } catch (err) {
           const toolsRejected =
             tools.length > 0 &&
@@ -289,13 +305,16 @@ export async function startAssistant(
             err.status === 400 &&
             /tool/i.test(err.message)
           if (!toolsRejected || controller.signal.aborted) throw err
-          // Endpoint rejected the tools param: degrade gracefully — inject the
+          // Endpoint rejected tools/tool_choice: degrade gracefully — inject the
           // search results the tool would have fetched, then retry bare.
           tools = []
           if (opts.webSearch) {
-            const results = await exaSearch(lastUserText(transcript))
-            injectSearchResults(transcript, results)
-            gathered.sources.push(...results)
+            const query = lastUserText(transcript)
+            if (query.trim()) {
+              const results = await exaSearch(query)
+              injectSearchResults(transcript, results)
+              gathered.sources.push(...results)
+            }
           }
           result = await requestRound(transcript, [])
         }
@@ -464,7 +483,9 @@ export async function sendMessage(
     const anyWithoutTools = target.models.some(
       (m) => lookupMeta(metaMap, m)?.supportsTools === false
     )
-    if (anyWithoutTools) searchResults = await exaSearch(text)
+    // Inject mode needs the user's text as the query; an image-only send has
+    // nothing to search on, so skip rather than failing the whole send.
+    if (anyWithoutTools) searchResults = text.trim() ? await exaSearch(text) : undefined
     else toolWebSearch = true
   }
 

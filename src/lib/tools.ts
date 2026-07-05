@@ -119,6 +119,7 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
 
     if (name === "web_search") {
       const query = String((args as { query?: unknown }).query ?? "")
+      if (!query.trim()) return "Error: query must not be empty — call web_search again with a search query."
       const results = await exaSearch(query)
       sources.push(...results)
       return searchContextBlock(results)
