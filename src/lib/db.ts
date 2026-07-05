@@ -29,7 +29,8 @@ export interface ToolCallRecord {
   id: string
   name: string
   args: string
-  status: "running" | "done" | "error"
+  /** streaming = arguments still being generated; running = executing */
+  status: "streaming" | "running" | "done" | "error"
 }
 
 /** Full artifact state as of this message — latest snapshot in the thread wins. */

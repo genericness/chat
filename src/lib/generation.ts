@@ -182,7 +182,15 @@ export async function startAssistant(
   let roundBuf = ""
   let reasonBuf = ""
   let timer: number | undefined
-  const patch = () => ({ content: buf, reasoning: reasonBuf || undefined })
+  // Executed/settled calls live in `journal`; calls whose arguments are still
+  // streaming show up in `liveJournal` so the UI has progress before a round ends.
+  const journal: NonNullable<Message["toolCalls"]> = []
+  let liveJournal: NonNullable<Message["toolCalls"]> = []
+  const patch = () => ({
+    content: buf,
+    reasoning: reasonBuf || undefined,
+    toolCalls: journal.length || liveJournal.length ? [...journal, ...liveJournal] : undefined,
+  })
   const flush = () => {
     timer = undefined
     void db.messages.update(msg.id, patch())
@@ -198,6 +206,15 @@ export async function startAssistant(
   }
   const onReasoning = (text: string) => {
     reasonBuf += text
+    schedule()
+  }
+  const onToolCallDelta = (calls: import("@/lib/openai").ToolCall[]) => {
+    liveJournal = calls.map((c, i) => ({
+      id: c.id || `live_${i}`,
+      name: c.function.name,
+      args: c.function.arguments,
+      status: "streaming" as const,
+    }))
     schedule()
   }
 
@@ -218,6 +235,7 @@ export async function startAssistant(
         signal: controller.signal,
         onDelta,
         onReasoning,
+        onToolCallDelta,
       })
     try {
       // Without a generous default, some providers cap output low (Anthropic
@@ -257,7 +275,6 @@ export async function startAssistant(
 
       const transcript: ChatMessage[] = [...context]
       let tools = gathered.defs
-      const journal: NonNullable<Message["toolCalls"]> = []
 
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         roundBuf = ""
@@ -282,6 +299,7 @@ export async function startAssistant(
           }
           result = await requestRound(transcript, [])
         }
+        liveJournal = [] // round settled — real entries replace the streaming ones
         if (!result.toolCalls.length) {
           if (result.finishReason === "length") {
             buf += "\n\n*(response was cut off by the max tokens limit)*"
@@ -348,6 +366,7 @@ export async function startAssistant(
       })
     } catch (err) {
       window.clearTimeout(timer)
+      liveJournal = [] // drop never-executed streaming entries from the final state
       if (controller.signal.aborted) {
         await db.messages.update(msg.id, {
           ...patch(),

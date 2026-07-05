@@ -126,35 +126,43 @@ export function QuestionCard({ q }: { q: PendingQuestion }) {
   )
 }
 
+/** Pull a display detail out of (possibly still-streaming, partial) JSON args. */
+function chipLabel(c: NonNullable<Message["toolCalls"]>[number]): string {
+  // MCP tools are qualified "server__tool"; show the tool part.
+  let label = c.name.split("__").pop() ?? c.name
+  const detail =
+    /"(?:query|title)"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(c.args)?.[1] ??
+    /"question"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(c.args)?.[1]
+  if (detail) label += `: “${detail.slice(0, 60)}”`
+  // Writing an artifact can take a while — show the document growing.
+  if (
+    (c.status === "streaming" || c.status === "running") &&
+    /artifact/.test(c.name) &&
+    c.args.length > 512
+  ) {
+    label += ` · ${(c.args.length / 1024).toFixed(1)} KB`
+  }
+  return label
+}
+
 export function ToolChips({ calls }: { calls: NonNullable<Message["toolCalls"]> }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {calls.map((c, i) => {
-        // MCP tools are qualified "server__tool"; show the tool part.
-        let label = c.name.split("__").pop() ?? c.name
-        try {
-          const args = JSON.parse(c.args) as { query?: unknown }
-          if (typeof args.query === "string") label += `: “${args.query}”`
-        } catch {
-          // args still streaming or malformed — name alone is fine
-        }
-        return (
-          <span
-            key={c.id + i}
-            className="flex max-w-72 items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground"
-            title={c.args}
-          >
-            {c.status === "running" ? (
-              <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
-            ) : c.status === "error" ? (
-              <X className="size-3 shrink-0 text-destructive" />
-            ) : (
-              <Wrench className="size-3 shrink-0 text-primary" />
-            )}
-            <span className="truncate">{label}</span>
-          </span>
-        )
-      })}
+      {calls.map((c, i) => (
+        <span
+          key={c.id + i}
+          className="flex max-w-80 items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground"
+        >
+          {c.status === "streaming" || c.status === "running" ? (
+            <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
+          ) : c.status === "error" ? (
+            <X className="size-3 shrink-0 text-destructive" />
+          ) : (
+            <Wrench className="size-3 shrink-0 text-primary" />
+          )}
+          <span className="truncate">{chipLabel(c)}</span>
+        </span>
+      ))}
     </div>
   )
 }

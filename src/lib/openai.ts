@@ -46,6 +46,8 @@ export interface CompletionRequest {
   onDelta: (text: string) => void
   /** Chain-of-thought deltas (`reasoning_content` / `reasoning`), when the model emits them. */
   onReasoning?: (text: string) => void
+  /** Fired as tool-call arguments stream in, with the accumulated calls so far. */
+  onToolCallDelta?: (calls: ToolCall[]) => void
 }
 
 export interface CompletionResult {
@@ -175,7 +177,10 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<Comp
       const reasoning = delta?.reasoning_content ?? delta?.reasoning
       if (reasoning) req.onReasoning?.(reasoning)
       if (delta?.content) req.onDelta(delta.content)
-      accumulateToolCalls(toolCalls, delta?.tool_calls)
+      if (delta?.tool_calls?.length) {
+        accumulateToolCalls(toolCalls, delta.tool_calls)
+        req.onToolCallDelta?.(toolCalls.filter(Boolean))
+      }
     },
   })
 
