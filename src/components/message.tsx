@@ -1,11 +1,51 @@
-import { memo, useState } from "react"
-import { Check, Copy, Pencil, RefreshCw } from "lucide-react"
+import { memo, useEffect, useMemo, useState } from "react"
+import { useLiveQuery } from "dexie-react-hooks"
+import { Check, Copy, FileText, Pencil, RefreshCw } from "lucide-react"
 
 import { Markdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { db, type Message } from "@/lib/db"
 import { editResend, regenerate } from "@/lib/generation"
-import type { Message } from "@/lib/db"
+
+function AttachmentThumbs({ ids }: { ids: string[] }) {
+  const atts = useLiveQuery(
+    async () => (await db.attachments.bulkGet(ids)).filter((a) => a !== undefined),
+    [ids.join()]
+  )
+  const urls = useMemo(
+    () =>
+      (atts ?? []).map((a) =>
+        a.mime.startsWith("image/") ? URL.createObjectURL(a.blob) : undefined
+      ),
+    [atts]
+  )
+  useEffect(() => () => urls.forEach((u) => u && URL.revokeObjectURL(u)), [urls])
+
+  if (!atts?.length) return null
+  return (
+    <div className="flex max-w-[85%] flex-wrap justify-end gap-2">
+      {atts.map((a, i) =>
+        urls[i] ? (
+          <img
+            key={a.id}
+            src={urls[i]}
+            alt={a.name}
+            className="max-h-48 rounded-xl border border-border/70 object-cover"
+          />
+        ) : (
+          <div
+            key={a.id}
+            className="flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted px-2.5 py-1.5"
+          >
+            <FileText className="size-4 shrink-0 text-muted-foreground" />
+            <span className="max-w-40 truncate text-xs">{a.name}</span>
+          </div>
+        )
+      )}
+    </div>
+  )
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
@@ -66,9 +106,12 @@ export const MessageBubble = memo(function MessageBubble({
     }
     return (
       <div className="group/msg flex flex-col items-end gap-1">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[0.95rem] whitespace-pre-wrap">
-          {message.content}
-        </div>
+        {message.attachmentIds && <AttachmentThumbs ids={message.attachmentIds} />}
+        {message.content && (
+          <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[0.95rem] whitespace-pre-wrap">
+            {message.content}
+          </div>
+        )}
         <div className="flex opacity-0 transition-opacity group-hover/msg:opacity-100">
           <CopyButton text={message.content} />
           <Button

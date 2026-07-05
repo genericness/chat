@@ -9,7 +9,7 @@ import {
   type Conversation,
   type Message,
 } from "@/lib/db"
-import { streamChatCompletion, type ChatMessage } from "@/lib/openai"
+import { streamChatCompletion, type ChatMessage, type ContentPart } from "@/lib/openai"
 import { activeProfile, getPrefs, type Profile } from "@/lib/profiles"
 
 // Module singleton: survives route changes; Dexie is the source of truth for UI.
@@ -43,6 +43,34 @@ function resolveTarget(conv: Conversation | undefined): {
   return { profile, model }
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
+/** Images become OpenAI multimodal parts; other files are inlined as fenced text. */
+async function userContent(m: Message): Promise<string | ContentPart[]> {
+  if (!m.attachmentIds?.length) return m.content
+  const atts = (await db.attachments.bulkGet(m.attachmentIds)).filter(
+    (a) => a !== undefined
+  )
+  let text = m.content
+  const imageParts: ContentPart[] = []
+  for (const a of atts) {
+    if (a.mime.startsWith("image/")) {
+      imageParts.push({ type: "image_url", image_url: { url: await blobToDataUrl(a.blob) } })
+    } else {
+      text += `\n\n[Attached file: ${a.name}]\n\`\`\`\n${await a.blob.text()}\n\`\`\``
+    }
+  }
+  if (!imageParts.length) return text
+  return [{ type: "text", text }, ...imageParts]
+}
+
 async function buildContext(convId: string, uptoSeq: number): Promise<ChatMessage[]> {
   const conv = await db.conversations.get(convId)
   const rows = await db.messages.where("convId").equals(convId).sortBy("seq")
@@ -54,7 +82,7 @@ async function buildContext(convId: string, uptoSeq: number): Promise<ChatMessag
   for (const m of rows) {
     if (m.seq >= uptoSeq) break
     if (m.role === "user") {
-      context.push({ role: "user", content: m.content })
+      context.push({ role: "user", content: await userContent(m) })
     } else if (m.active && (m.status === "done" || m.status === "stopped") && m.content) {
       context.push({ role: "assistant", content: m.content })
     }
@@ -179,12 +207,30 @@ export async function editResend(userMsgId: string, newText: string) {
 }
 
 /** Send a user message; creates the conversation when convId is null. Returns the convId. */
-export async function sendMessage(convId: string | null, text: string): Promise<string> {
+export async function sendMessage(
+  convId: string | null,
+  text: string,
+  files: File[] = []
+): Promise<string> {
   let conv = convId ? await db.conversations.get(convId) : undefined
   const target = resolveTarget(conv) // throws before any writes if unconfigured
 
   if (!conv) {
     conv = await createConversation(text)
+  }
+
+  const attachmentIds: string[] = []
+  for (const f of files) {
+    const id = crypto.randomUUID()
+    await db.attachments.add({
+      id,
+      convId: conv.id,
+      name: f.name || "pasted-image.png",
+      mime: f.type || "application/octet-stream",
+      blob: f,
+      createdAt: Date.now(),
+    })
+    attachmentIds.push(id)
   }
 
   const userMsg: Message = {
@@ -193,6 +239,7 @@ export async function sendMessage(convId: string | null, text: string): Promise<
     seq: await nextSeq(conv.id),
     role: "user",
     content: text,
+    attachmentIds: attachmentIds.length ? attachmentIds : undefined,
     active: true,
     status: "done",
     createdAt: Date.now(),

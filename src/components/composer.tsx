@@ -1,6 +1,6 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
-import { ArrowUp, Plus, Square } from "lucide-react"
+import { ArrowUp, FileText, Plus, Square, X } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -11,6 +11,13 @@ import { sendMessage, stopConversation } from "@/lib/generation"
 import { activeProfile, usePrefs } from "@/lib/profiles"
 import { cn } from "@/lib/utils"
 
+const MAX_TEXT_FILE = 100 * 1024
+
+interface Pending {
+  file: File
+  url?: string // object URL for image previews
+}
+
 interface ComposerProps {
   convId?: string
   className?: string
@@ -18,6 +25,8 @@ interface ComposerProps {
 
 export function Composer({ convId, className }: ComposerProps) {
   const [text, setText] = useState("")
+  const [pending, setPending] = useState<Pending[]>([])
+  const fileInput = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const prefs = usePrefs()
   const profile = activeProfile(prefs)
@@ -35,12 +44,35 @@ export function Composer({ convId, className }: ComposerProps) {
   )
   const isStreaming = (streaming?.length ?? 0) > 0
 
+  const addFiles = (files: FileList | File[]) => {
+    const next: Pending[] = []
+    for (const file of files) {
+      const isImage = file.type.startsWith("image/")
+      if (!isImage && file.size > MAX_TEXT_FILE) {
+        toast.error(`${file.name} is too large to inline (max 100KB for text files)`)
+        continue
+      }
+      next.push({ file, url: isImage ? URL.createObjectURL(file) : undefined })
+    }
+    if (next.length) setPending((p) => [...p, ...next])
+  }
+
+  const removePending = (i: number) => {
+    setPending((p) => {
+      if (p[i]?.url) URL.revokeObjectURL(p[i].url)
+      return p.filter((_, idx) => idx !== i)
+    })
+  }
+
   const send = async () => {
     const t = text.trim()
-    if (!t || isStreaming) return
+    if ((!t && pending.length === 0) || isStreaming) return
     setText("")
+    const files = pending.map((p) => p.file)
+    pending.forEach((p) => p.url && URL.revokeObjectURL(p.url))
+    setPending([])
     try {
-      const id = await sendMessage(convId ?? null, t)
+      const id = await sendMessage(convId ?? null, t, files)
       if (!convId) navigate(`/c/${id}`)
     } catch (err) {
       setText(t)
@@ -50,50 +82,102 @@ export function Composer({ convId, className }: ComposerProps) {
 
   return (
     <div className={cn("w-full max-w-2xl", className)}>
-      <div className="flex items-end gap-1.5 rounded-4xl border border-border/70 bg-card/40 p-2 shadow-lg backdrop-blur-sm transition-colors focus-within:border-input">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="shrink-0 rounded-full text-muted-foreground"
-          aria-label="Add attachment"
-        >
-          <Plus className="size-5" />
-        </Button>
-        <textarea
-          rows={1}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault()
-              void send()
-            }
-          }}
-          placeholder="Ask anything"
-          className="max-h-44 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-[0.95rem] outline-none field-sizing-content placeholder:text-muted-foreground"
-        />
-        <ModelPicker profile={profile} />
-        {isStreaming ? (
-          <Button
-            size="icon"
-            variant="secondary"
-            className="shrink-0 rounded-full"
-            onClick={() => convId && void stopConversation(convId)}
-            aria-label="Stop generating"
-          >
-            <Square className="size-4 fill-current" />
-          </Button>
-        ) : (
-          <Button
-            size="icon"
-            className="shrink-0 rounded-full"
-            disabled={!text.trim()}
-            onClick={() => void send()}
-            aria-label="Send"
-          >
-            <ArrowUp className="size-5" />
-          </Button>
+      <div
+        className="flex flex-col rounded-4xl border border-border/70 bg-card/40 p-2 shadow-lg backdrop-blur-sm transition-colors focus-within:border-input"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault()
+          addFiles(e.dataTransfer.files)
+        }}
+      >
+        {pending.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-2 pt-1 pb-2">
+            {pending.map((p, i) => (
+              <div
+                key={i}
+                className="group/att relative overflow-hidden rounded-lg border border-border/70 bg-muted"
+              >
+                {p.url ? (
+                  <img src={p.url} alt={p.file.name} className="size-16 object-cover" />
+                ) : (
+                  <div className="flex h-16 max-w-40 items-center gap-1.5 px-2">
+                    <FileText className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate text-xs">{p.file.name}</span>
+                  </div>
+                )}
+                <button
+                  className="absolute top-0.5 right-0.5 cursor-pointer rounded-full bg-black/60 p-0.5 opacity-0 transition-opacity group-hover/att:opacity-100"
+                  onClick={() => removePending(i)}
+                  aria-label={`Remove ${p.file.name}`}
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
+        <div className="flex items-end gap-1.5">
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) addFiles(e.target.files)
+              e.target.value = ""
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 rounded-full text-muted-foreground"
+            aria-label="Add attachment"
+            onClick={() => fileInput.current?.click()}
+          >
+            <Plus className="size-5" />
+          </Button>
+          <textarea
+            rows={1}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                void send()
+              }
+            }}
+            onPaste={(e) => {
+              if (e.clipboardData.files.length) {
+                e.preventDefault()
+                addFiles(e.clipboardData.files)
+              }
+            }}
+            placeholder="Ask anything"
+            className="max-h-44 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-[0.95rem] outline-none field-sizing-content placeholder:text-muted-foreground"
+          />
+          <ModelPicker profile={profile} />
+          {isStreaming ? (
+            <Button
+              size="icon"
+              variant="secondary"
+              className="shrink-0 rounded-full"
+              onClick={() => convId && void stopConversation(convId)}
+              aria-label="Stop generating"
+            >
+              <Square className="size-4 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              className="shrink-0 rounded-full"
+              disabled={!text.trim() && pending.length === 0}
+              onClick={() => void send()}
+              aria-label="Send"
+            >
+              <ArrowUp className="size-5" />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )
