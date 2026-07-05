@@ -1,5 +1,6 @@
 import { memo } from "react"
 
+import { Markdown } from "@/components/markdown"
 import type { Message } from "@/lib/db"
 
 export const MessageBubble = memo(function MessageBubble({
@@ -22,10 +23,10 @@ export const MessageBubble = memo(function MessageBubble({
       {message.model && (
         <span className="text-xs text-muted-foreground">{message.model}</span>
       )}
-      <div className="text-[0.95rem] leading-relaxed whitespace-pre-wrap">
-        {message.content}
+      <div>
+        <Markdown text={message.content} />
         {message.status === "streaming" && (
-          <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-xs bg-primary/70 align-text-bottom" />
+          <span className="mt-1 inline-block h-4 w-2 animate-pulse rounded-xs bg-primary/70" />
         )}
       </div>
       {message.status === "error" && (

@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@plugin "@tailwindcss/typography";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -190,6 +192,11 @@
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
+}
+
+/* rehype-highlight theme backgrounds are handled by our own code-block chrome */
+.hljs {
+  background: transparent !important;
 }
 
 @keyframes shine {
