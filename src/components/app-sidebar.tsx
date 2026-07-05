@@ -7,9 +7,10 @@ import { cn } from "@/lib/utils"
 interface AppSidebarProps {
   open: boolean
   onClose: () => void
+  onOpenSettings: () => void
 }
 
-export function AppSidebar({ open, onClose }: AppSidebarProps) {
+export function AppSidebar({ open, onClose, onOpenSettings }: AppSidebarProps) {
   return (
     <>
       {open && (
@@ -57,7 +58,11 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
         </div>
 
         <div className="border-t border-sidebar-border p-2">
-          <Button variant="ghost" className="w-full justify-start gap-2">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2"
+            onClick={onOpenSettings}
+          >
             <Settings />
             Settings
           </Button>
