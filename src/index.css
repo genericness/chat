@@ -192,6 +192,15 @@
   }
 }
 
+@keyframes shine {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: -100% 50%;
+  }
+}
+
 @utility text-legible {
   text-shadow:
     0 1px 2px rgb(0 0 0 / 0.85),

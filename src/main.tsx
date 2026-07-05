@@ -6,10 +6,15 @@ import "@fontsource-variable/jetbrains-mono"
 import "@fontsource/pixelify-sans"
 import "./index.css"
 
+import { App } from "@/App"
+import { Toaster } from "@/components/ui/sonner"
+import { TooltipProvider } from "@/components/ui/tooltip"
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <div className="flex min-h-[100svh] items-center justify-center">
-      <h1 className="font-pixel text-3xl text-primary">chat</h1>
-    </div>
+    <TooltipProvider delay={150}>
+      <App />
+    </TooltipProvider>
+    <Toaster position="bottom-right" />
   </StrictMode>
 )
