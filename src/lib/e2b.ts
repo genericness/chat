@@ -43,6 +43,9 @@ interface E2bMock {
 
 const CODE_TIMEOUT_MS = 2 * 60_000
 const DESKTOP_TIMEOUT_MS = 2 * 60_000
+// Small enough to send screenshots at native size without huge token cost,
+// so the model's click coordinates line up with what it sees.
+const DESKTOP_RESOLUTION: [number, number] = [1024, 768]
 
 function apiKey(): string {
   const key = getPrefs().e2bKey
@@ -97,13 +100,18 @@ async function createDesktopSandbox(): Promise<DesktopHandle> {
   const m = mock()
   if (m) return m.createDesktop()
   const { Sandbox } = await import("@e2b/desktop")
+  // Computer use is coordinate-sensitive: the model clicks based on what it
+  // sees, so the screenshot it receives MUST match the desktop's pixel space.
+  // We keep a modest native resolution and send screenshots un-resized (see
+  // e2b-tools) so image coords == click coords exactly.
   const sb = await Sandbox.create({
     apiKey: apiKey(),
-    resolution: [1280, 720],
+    resolution: DESKTOP_RESOLUTION,
     timeoutMs: DESKTOP_TIMEOUT_MS,
   })
   await sb.stream.start({ requireAuth: true })
   const streamUrl = sb.stream.getUrl({ authKey: sb.stream.getAuthKey(), viewOnly: true })
+  const size = await sb.getScreenSize().catch(() => null)
   return {
     async screenshot() {
       return sb.screenshot()
@@ -129,7 +137,9 @@ async function createDesktopSandbox(): Promise<DesktopHandle> {
       }
     },
     streamUrl,
-    screenSize: { width: 1280, height: 720 },
+    screenSize: size
+      ? { width: size.width, height: size.height }
+      : { width: DESKTOP_RESOLUTION[0], height: DESKTOP_RESOLUTION[1] },
     kill: async () => {
       await sb.stream.stop().catch(() => {})
       await sb.kill().catch(() => {})

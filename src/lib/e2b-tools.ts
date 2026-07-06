@@ -64,7 +64,7 @@ export const COMPUTER_TOOL_DEFS: ToolDef[] = [
     function: {
       name: "computer_start",
       description:
-        "Start a virtual Linux desktop (1280x720) you can see and control. The user watches it live. Returns the screen size; a screenshot follows as the next user message. Use computer_action to interact.",
+        "Start a virtual Linux desktop you can see and control. The user watches it live. Returns the exact screen size; a screenshot at that same pixel size follows as the next user message. Use computer_action to interact.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -73,7 +73,7 @@ export const COMPUTER_TOOL_DEFS: ToolDef[] = [
     function: {
       name: "computer_action",
       description:
-        "Perform one action on the virtual desktop, then receive a fresh screenshot as the next user message. Coordinates are pixels from the top-left of the 1280x720 screen.",
+        "Perform one action on the virtual desktop, then receive a fresh screenshot as the next user message. Coordinates are pixels from the top-left of the screenshot you were given (which is 1:1 with the real screen), where x grows right and y grows down.",
       parameters: {
         type: "object",
         properties: {
@@ -102,15 +102,15 @@ export const COMPUTER_TOOL_DEFS: ToolDef[] = [
   },
 ]
 
-/** Downscale to ≤1024px wide JPEG to keep screenshot tokens sane. */
+/**
+ * Re-encode the PNG screenshot as JPEG (smaller = fewer tokens) at its NATIVE
+ * size. Do not resize: the model clicks based on the pixels it sees, so the
+ * image must stay 1:1 with the desktop's coordinate space, or clicks miss.
+ */
 async function toJpegDataUrl(png: Uint8Array): Promise<string> {
   const bitmap = await createImageBitmap(new Blob([png as BlobPart], { type: "image/png" }))
-  const scale = Math.min(1, 1024 / bitmap.width)
-  const canvas = new OffscreenCanvas(
-    Math.round(bitmap.width * scale),
-    Math.round(bitmap.height * scale)
-  )
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0)
   bitmap.close()
   const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.8 })
   return new Promise((resolve, reject) => {
