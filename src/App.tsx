@@ -7,12 +7,21 @@ import { ChatSearch } from "@/components/chat-search"
 import { Onboarding } from "@/components/onboarding"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { Button } from "@/components/ui/button"
+import { usePrefs } from "@/lib/profiles"
+import { cn } from "@/lib/utils"
 
 export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const prefs = usePrefs()
   const navigate = useNavigate()
+
+  // First run: no endpoints yet. The settings icon opens the setup flow.
+  const needsSetup = !prefs.onboardedAt && prefs.profiles.length === 0
+  const openSettings = () =>
+    needsSetup ? setWizardOpen(true) : setSettingsOpen(true)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -35,8 +44,9 @@ export function App() {
       <AppSidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettings}
         onOpenSearch={() => setSearchOpen(true)}
+        needsSetup={needsSetup}
       />
       <main className="relative flex min-w-0 flex-1 flex-col">
         <div className="flex items-center p-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
@@ -45,15 +55,21 @@ export function App() {
             size="icon"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
+            className={cn(needsSetup && "text-primary ring-2 ring-primary/50")}
           >
             <Menu />
           </Button>
+          {needsSetup && (
+            <span className="ml-1 text-sm font-medium text-primary">
+              Set up here
+            </span>
+          )}
         </div>
         <Outlet />
       </main>
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <ChatSearch open={searchOpen} onOpenChange={setSearchOpen} />
-      <Onboarding />
+      <Onboarding open={wizardOpen} onClose={() => setWizardOpen(false)} />
     </div>
   )
 }

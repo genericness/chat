@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import {
+  ArrowDown,
   Loader2,
   MessageSquarePlus,
   MoreHorizontal,
@@ -28,6 +29,7 @@ interface AppSidebarProps {
   onClose: () => void
   onOpenSettings: () => void
   onOpenSearch: () => void
+  needsSetup?: boolean
 }
 
 export function AppSidebar({
@@ -35,6 +37,7 @@ export function AppSidebar({
   onClose,
   onOpenSettings,
   onOpenSearch,
+  needsSetup,
 }: AppSidebarProps) {
   const navigate = useNavigate()
   const { id: activeId } = useParams<{ id: string }>()
@@ -194,13 +197,26 @@ export function AppSidebar({
         </div>
 
         <div className="border-t border-sidebar-border p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          {needsSetup && (
+            <div className="flex items-center gap-2 px-2 pb-2 text-primary">
+              <ArrowDown className="size-8 shrink-0 animate-bounce" strokeWidth={2.5} />
+              <span className="text-sm font-medium leading-tight">
+                Set up here to
+                <br />
+                add your first model
+              </span>
+            </div>
+          )}
           <Button
-            variant="ghost"
-            className="w-full justify-start gap-2"
+            variant={needsSetup ? "secondary" : "ghost"}
+            className={cn(
+              "w-full justify-start gap-2",
+              needsSetup && "ring-2 ring-primary/60"
+            )}
             onClick={onOpenSettings}
           >
             <Settings />
-            Settings
+            {needsSetup ? "Get started" : "Settings"}
           </Button>
         </div>
       </aside>

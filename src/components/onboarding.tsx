@@ -15,19 +15,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { fmtContext, fmtPricePerM, lookupMeta, useOpenRouterMeta } from "@/hooks/use-models"
 import { testEndpoint, type EndpointTestResult } from "@/lib/endpoint-test"
-import { getPrefs, normalizeBaseUrl, PRESETS, setPrefs } from "@/lib/profiles"
+import { normalizeBaseUrl, PRESETS, setPrefs } from "@/lib/profiles"
 import { cn } from "@/lib/utils"
 
 const STEPS = ["Welcome", "Endpoint", "Search & tools", "System prompt"] as const
 
-export function Onboarding() {
-  // Eligibility is decided once at mount — saving the endpoint mid-flow makes
-  // profiles non-empty and must not unmount the wizard.
-  const [eligible] = useState(() => {
-    const p = getPrefs()
-    return !p.onboardedAt && p.profiles.length === 0
-  })
-  const [dismissed, setDismissed] = useState(false)
+export function Onboarding({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [step, setStep] = useState(0)
 
   // endpoint draft
@@ -42,7 +35,7 @@ export function Onboarding() {
   const [mcp, setMcp] = useState({ name: "", url: "" })
   const [systemPrompt, setSystemPrompt] = useState("")
 
-  if (!eligible || dismissed) return null
+  if (!open) return null
 
   const models = test.state === "done" && test.result.ok ? test.result.models : []
   const preset = PRESETS.find((p) => normalizeBaseUrl(p.baseUrl) === normalizeBaseUrl(draft.baseUrl))
@@ -85,7 +78,7 @@ export function Onboarding() {
   const finish = () => {
     if (systemPrompt.trim()) setPrefs({ globalSystemPrompt: systemPrompt.trim() })
     setPrefs({ onboardedAt: Date.now() })
-    setDismissed(true)
+    onClose()
   }
 
   const next = () => {
@@ -97,7 +90,7 @@ export function Onboarding() {
 
   const skipAll = () => {
     setPrefs({ onboardedAt: Date.now() })
-    setDismissed(true)
+    onClose()
   }
 
   return (
