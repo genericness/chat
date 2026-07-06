@@ -4,21 +4,15 @@ import { Outlet, useNavigate } from "react-router-dom"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { ChatSearch } from "@/components/chat-search"
+import { Onboarding } from "@/components/onboarding"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { Button } from "@/components/ui/button"
-import { usePrefs } from "@/lib/profiles"
 
 export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
-  const prefs = usePrefs()
   const navigate = useNavigate()
-
-  // First run: no endpoints configured yet.
-  useEffect(() => {
-    if (prefs.profiles.length === 0) setSettingsOpen(true)
-  }, [prefs.profiles.length])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -59,6 +53,7 @@ export function App() {
       </main>
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <ChatSearch open={searchOpen} onOpenChange={setSearchOpen} />
+      <Onboarding />
     </div>
   )
 }

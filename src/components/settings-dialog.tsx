@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { Check, LogIn, Pencil, Plus, Trash2 } from "lucide-react"
+import { Check, Loader2, LogIn, Pencil, Plug, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { useLogout, useMe } from "@/hooks/use-me"
+import { testEndpoint, type EndpointTestResult } from "@/lib/endpoint-test"
 import { authorizeMcpServer, disconnectMcpServer } from "@/lib/mcp-oauth"
 
 function GithubIcon() {
@@ -114,6 +115,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     prefs.profiles.length === 0 ? "new" : null
   )
   const [draft, setDraft] = useState(EMPTY_DRAFT)
+  const [test, setTest] = useState<
+    { state: "idle" | "testing" } | { state: "done"; result: EndpointTestResult }
+  >({ state: "idle" })
 
   const startEdit = (p: Profile) => {
     setDraft({
@@ -333,7 +337,48 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     setDraft({ ...draft, defaultModel: e.target.value })
                   }
                   placeholder="openrouter/auto"
+                  list="endpoint-models"
                 />
+                {test.state === "done" && test.result.ok && (
+                  <datalist id="endpoint-models">
+                    {test.result.models.slice(0, 200).map((m) => (
+                      <option key={m} value={m} />
+                    ))}
+                  </datalist>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!draft.baseUrl.trim() || test.state === "testing"}
+                  onClick={async () => {
+                    setTest({ state: "testing" })
+                    setTest({
+                      state: "done",
+                      result: await testEndpoint(
+                        normalizeBaseUrl(draft.baseUrl),
+                        draft.apiKey.trim()
+                      ),
+                    })
+                  }}
+                >
+                  {test.state === "testing" ? (
+                    <Loader2 data-icon="inline-start" className="animate-spin" />
+                  ) : (
+                    <Plug data-icon="inline-start" />
+                  )}
+                  Test
+                </Button>
+                {test.state === "done" &&
+                  (test.result.ok ? (
+                    <span className="text-sm text-primary">
+                      ✓ {test.result.models.length} models available
+                    </span>
+                  ) : (
+                    <span className="text-sm text-destructive">{test.result.detail}</span>
+                  ))}
               </div>
 
               <div className="flex justify-end gap-2">

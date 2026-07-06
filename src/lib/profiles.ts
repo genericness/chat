@@ -19,6 +19,7 @@ export interface Prefs {
   mcpServers?: McpServerConfig[]
   syncEnabled?: boolean
   lastSyncAt?: number
+  onboardedAt?: number
 }
 
 export interface Preset {
