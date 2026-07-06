@@ -41,8 +41,8 @@ interface E2bMock {
   createDesktop(): Promise<DesktopHandle>
 }
 
-const CODE_TIMEOUT_MS = 5 * 60_000
-const DESKTOP_TIMEOUT_MS = 10 * 60_000
+const CODE_TIMEOUT_MS = 2 * 60_000
+const DESKTOP_TIMEOUT_MS = 2 * 60_000
 
 function apiKey(): string {
   const key = getPrefs().e2bKey
