@@ -14,6 +14,10 @@ export interface ToolCall {
   id: string
   type: "function"
   function: { name: string; arguments: string }
+  // Gemini thinking models attach a thought_signature here (extra_content.google.
+  // thought_signature) that MUST be echoed back verbatim on the next request or
+  // the API 400s. We preserve it opaquely through the round-trip.
+  extra_content?: unknown
 }
 
 export interface ToolDef {
@@ -73,6 +77,7 @@ interface ToolCallDelta {
   index?: number
   id?: string
   function?: { name?: string; arguments?: string }
+  extra_content?: unknown
 }
 
 /** Streamed tool_call fragments arrive keyed by index; concatenate as they come. */
@@ -81,6 +86,7 @@ function accumulateToolCalls(acc: ToolCall[], deltas: ToolCallDelta[] | undefine
     const i = d.index ?? 0
     acc[i] ??= { id: "", type: "function", function: { name: "", arguments: "" } }
     if (d.id) acc[i].id = d.id
+    if (d.extra_content !== undefined) acc[i].extra_content = d.extra_content // Gemini thought_signature
     if (d.function?.name) acc[i].function.name += d.function.name
     if (d.function?.arguments) acc[i].function.arguments += d.function.arguments
   }
