@@ -12,7 +12,6 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   fmtContext,
-  fmtPricePerM,
   lookupMeta,
   useEndpointModels,
   useOpenRouterMeta,
@@ -26,12 +25,7 @@ export function modelDisplayName(id: string, meta?: ModelMeta): string {
 }
 
 function MetaLine({ id, meta }: { id: string; meta?: ModelMeta }) {
-  const bits = [
-    id,
-    fmtContext(meta?.contextLength),
-    fmtPricePerM(meta?.pricing?.prompt) &&
-      `${fmtPricePerM(meta?.pricing?.prompt)} in · ${fmtPricePerM(meta?.pricing?.completion) ?? "$0/M"} out`,
-  ].filter(Boolean)
+  const bits = [id, fmtContext(meta?.contextLength)].filter(Boolean)
   return (
     <span className="truncate text-xs text-muted-foreground">
       {bits.join(" · ")}
