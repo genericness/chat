@@ -27,7 +27,6 @@ Your endpoints, API keys, and chats live in your browser. The server is only inv
 - GitHub login is identity-only: the OAuth token is revoked immediately after fetching your profile.
 
 ## Architecture
-
 - **Cloudflare Worker + Hono** serves the SPA (via the `ASSETS` binding) and the small API: GitHub OAuth, `/api/sync/*` (D1 + R2), `/api/openrouter/models` (edge-cached slim metadata), `/api/exa/search` (pass-through proxy).
 - **Vite + React 19 + TypeScript**, Tailwind v4 (CSS-first config), shadcn/ui (`base-nova` style on Base UI), TanStack Query for server state, Dexie (`useLiveQuery`) as the single source of truth for chats — streams write through to IndexedDB, so generation survives navigation.
 - **D1** stores users, conversation metadata, and per-message rows; **R2** stores attachment blobs.
@@ -77,8 +76,6 @@ Then set `GITHUB_CLIENT_ID` in `wrangler.jsonc` (prod OAuth app callback: `https
 ```sh
 pnpm run deploy
 ```
-
-The custom domain is bound via the `routes` block in `wrangler.jsonc`.
 
 ## Scripts
 
