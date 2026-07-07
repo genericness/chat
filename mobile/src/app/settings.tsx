@@ -1,10 +1,13 @@
 import {
+  disconnectMcpServer,
   getPrefs,
   normalizeBaseUrl,
   PRESETS,
   runSync,
   setPrefs,
   testEndpoint,
+  updateMcpServer,
+  type McpServerConfig,
   type Profile,
 } from "@chat/core"
 import { useEffect, useState } from "react"
@@ -21,6 +24,7 @@ import {
 
 import { getToken, signIn, signOut } from "@/lib/auth"
 import { mobileFetch } from "@/lib/fetch"
+import { authorizeMcpServer } from "@/lib/mcp-oauth"
 import { usePrefs } from "@/lib/use-prefs"
 
 interface Me {
@@ -302,7 +306,114 @@ export default function Settings() {
         multiline
         placeholder="Applied to every conversation without its own prompt"
       />
+
+      <Text className="mb-2 mt-2 text-xs uppercase text-muted">MCP servers</Text>
+      <McpSection servers={prefs.mcpServers ?? []} />
       <View className="h-16" />
     </ScrollView>
+  )
+}
+
+function McpSection({ servers }: { servers: McpServerConfig[] }) {
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState("")
+  const [url, setUrl] = useState("")
+  const [token, setToken] = useState("")
+
+  const add = () => {
+    if (!url.trim()) return Alert.alert("Server URL is required")
+    const server: McpServerConfig = {
+      id: crypto.randomUUID(),
+      name: name.trim() || new URL(url.trim()).hostname,
+      url: url.trim(),
+      authToken: token.trim() || undefined,
+      enabled: true,
+    }
+    setPrefs({ mcpServers: [...(getPrefs().mcpServers ?? []), server] })
+    setAdding(false)
+    setName("")
+    setUrl("")
+    setToken("")
+  }
+
+  const remove = (s: McpServerConfig) => {
+    Alert.alert("Remove server?", s.name, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () =>
+          setPrefs({ mcpServers: (getPrefs().mcpServers ?? []).filter((x) => x.id !== s.id) }),
+      },
+    ])
+  }
+
+  const connect = (s: McpServerConfig) => {
+    void authorizeMcpServer(s)
+      .then(() => Alert.alert("Connected", `"${s.name}" is authorized.`))
+      .catch((e) => Alert.alert("Error", e instanceof Error ? e.message : String(e)))
+  }
+
+  return (
+    <View className="mb-4">
+      {servers.map((s) => (
+        <Pressable
+          key={s.id}
+          className="mb-2 rounded-xl border border-border bg-card/50 px-4 py-3"
+          onLongPress={() => remove(s)}
+        >
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1 pr-3">
+              <Text className="text-foreground">{s.name}</Text>
+              <Text className="text-xs text-muted" numberOfLines={1}>
+                {s.url}
+              </Text>
+            </View>
+            <Switch
+              value={s.enabled}
+              onValueChange={(v) => updateMcpServer(s.id, { enabled: v })}
+            />
+          </View>
+          <View className="mt-2 flex-row gap-4">
+            {s.oauth?.tokens ? (
+              <Pressable hitSlop={6} onPress={() => disconnectMcpServer(s.id)}>
+                <Text className="text-xs text-muted">disconnect oauth</Text>
+              </Pressable>
+            ) : (
+              !s.authToken && (
+                <Pressable hitSlop={6} onPress={() => connect(s)}>
+                  <Text className="text-xs text-accent">connect (oauth)</Text>
+                </Pressable>
+              )
+            )}
+          </View>
+        </Pressable>
+      ))}
+      {adding ? (
+        <View className="mb-2 rounded-xl border border-border bg-card/50 p-4">
+          <Field label="Name" value={name} onChange={setName} placeholder="My server" />
+          <Field label="URL" value={url} onChange={setUrl} placeholder="https://…/mcp" />
+          <Field label="Bearer token (optional)" value={token} onChange={setToken} secure />
+          <View className="flex-row gap-2">
+            <Pressable
+              className="flex-1 items-center rounded-lg border border-border py-2.5"
+              onPress={() => setAdding(false)}
+            >
+              <Text className="text-muted">Cancel</Text>
+            </Pressable>
+            <Pressable className="flex-1 items-center rounded-lg bg-foreground py-2.5" onPress={add}>
+              <Text className="font-semibold text-background">Add</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <Pressable
+          className="items-center rounded-xl border border-dashed border-border py-3"
+          onPress={() => setAdding(true)}
+        >
+          <Text className="text-muted">+ Add MCP server</Text>
+        </Pressable>
+      )}
+    </View>
   )
 }

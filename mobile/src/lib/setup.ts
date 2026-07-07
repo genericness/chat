@@ -34,7 +34,26 @@ export function initCore(): Promise<void> {
           pathname: "/artifact/[convId]/[artifactId]",
           params: { convId, artifactId },
         }),
-      // onMcpAuthRequired / extraTools: later phases
+      onMcpAuthRequired: (err) => {
+        Alert.alert(
+          "MCP authorization",
+          `"${err.server.name}" needs authorization.`,
+          [
+            { text: "Not now", style: "cancel" },
+            {
+              text: "Connect",
+              onPress: () => {
+                void import("./mcp-oauth").then(({ authorizeMcpServer }) =>
+                  authorizeMcpServer(err.server, err.wwwAuthenticate)
+                    .then(() => Alert.alert("Connected", `Send again to use "${err.server.name}" tools.`))
+                    .catch((e) => Alert.alert("Error", e instanceof Error ? e.message : String(e)))
+                )
+              },
+            },
+          ]
+        )
+      },
+      // extraTools (E2B): web-only for now
     })
 
     // Sync triggers (mirrors web's Dexie hooks + focus/visibility listeners).
