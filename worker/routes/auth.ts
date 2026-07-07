@@ -3,12 +3,22 @@ import type { AppEnv } from "../types"
 import { randomToken } from "../lib/crypto"
 import { exchangeCode, getUser, revokeToken } from "../lib/github"
 import { upsertUser } from "../lib/db"
-import { setSession, clearSession, setState, getState, clearState } from "../lib/cookies"
+import {
+  setSession,
+  clearSession,
+  setState,
+  getState,
+  clearState,
+  mintSessionToken,
+} from "../lib/cookies"
 
 const auth = new Hono<AppEnv>()
 
 auth.get("/login", (c) => {
-  const state = randomToken(16)
+  // ?mobile=1 → finish the flow by handing the app a bearer token via its
+  // custom scheme. The flag rides in `state`, which GitHub echoes back.
+  const mobile = c.req.query("mobile") === "1"
+  const state = randomToken(16) + (mobile ? ".mobile" : "")
   setState(c, state)
   const params = new URLSearchParams({
     client_id: c.env.GITHUB_CLIENT_ID,
@@ -40,6 +50,10 @@ auth.get("/callback", async (c) => {
 
   const user = await upsertUser(c.env.DB, gh)
   await setSession(c, user.id)
+  if (state.endsWith(".mobile")) {
+    const token = await mintSessionToken(c, user.id)
+    return c.redirect(`chat4x://auth?token=${encodeURIComponent(token)}`)
+  }
   return c.redirect("/")
 })
 

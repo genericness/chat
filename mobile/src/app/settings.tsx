@@ -2,22 +2,101 @@ import {
   getPrefs,
   normalizeBaseUrl,
   PRESETS,
+  runSync,
   setPrefs,
   testEndpoint,
   type Profile,
 } from "@chat/core"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   View,
 } from "react-native"
 
+import { getToken, signIn, signOut } from "@/lib/auth"
+import { mobileFetch } from "@/lib/fetch"
 import { usePrefs } from "@/lib/use-prefs"
+
+interface Me {
+  login: string
+  name?: string
+}
+
+function AccountSection({ prefs }: { prefs: ReturnType<typeof usePrefs> }) {
+  const [me, setMe] = useState<Me | null | "loading">(getToken() ? "loading" : null)
+
+  const refresh = async () => {
+    if (!getToken()) return setMe(null)
+    try {
+      const res = await mobileFetch("/api/me")
+      setMe(res.ok ? ((await res.json()) as Me) : null)
+    } catch {
+      setMe(null)
+    }
+  }
+  useEffect(() => {
+    void refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const doSignIn = async () => {
+    if (await signIn()) {
+      await refresh()
+      if (getPrefs().syncEnabled) void runSync()
+    }
+  }
+
+  return (
+    <View className="mb-6">
+      <Text className="mb-2 text-xs uppercase text-muted">Account & sync</Text>
+      {me === "loading" ? (
+        <ActivityIndicator size="small" color="#a1a1aa" className="self-start" />
+      ) : me ? (
+        <View className="rounded-xl border border-border bg-card/50 px-4 py-3">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-foreground">@{me.login}</Text>
+            <Pressable
+              hitSlop={8}
+              onPress={() => {
+                void signOut().then(() => setMe(null))
+              }}
+            >
+              <Text className="text-xs text-muted">sign out</Text>
+            </Pressable>
+          </View>
+          <View className="mt-3 flex-row items-center justify-between">
+            <View className="flex-1 pr-3">
+              <Text className="text-foreground">Sync chats</Text>
+              <Text className="text-xs text-muted">
+                Conversations sync across devices. Keys never leave this device.
+              </Text>
+            </View>
+            <Switch
+              value={!!prefs.syncEnabled}
+              onValueChange={(v) => {
+                setPrefs({ syncEnabled: v })
+                if (v) void runSync()
+              }}
+            />
+          </View>
+        </View>
+      ) : (
+        <Pressable
+          className="items-center rounded-xl border border-border bg-card/50 py-3"
+          onPress={() => void doSignIn()}
+        >
+          <Text className="text-foreground">Sign in with GitHub</Text>
+        </Pressable>
+      )}
+    </View>
+  )
+}
 
 function Field(props: {
   label: string
@@ -164,6 +243,7 @@ export default function Settings() {
 
   return (
     <ScrollView className="flex-1 bg-background px-4 pt-4" keyboardShouldPersistTaps="handled">
+      <AccountSection prefs={prefs} />
       <Text className="mb-2 text-xs uppercase text-muted">Endpoints</Text>
       {prefs.profiles.map((p) =>
         editing !== "new" && editing?.id === p.id ? (
