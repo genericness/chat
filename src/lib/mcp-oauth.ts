@@ -1,37 +1,20 @@
-// OAuth 2.1 for MCP servers (spec 2025-06-18 authorization flow), browser-side:
-// protected-resource metadata → auth-server metadata → dynamic client
-// registration → PKCE authorization-code flow in a popup → token refresh.
-// Tokens live in localStorage with the rest of the user's keys.
-import { getPrefs, setPrefs } from "@/lib/profiles"
-import type { McpServerConfig } from "@/lib/mcp"
+// OAuth 2.1 for MCP servers (spec 2025-06-18 authorization flow) — the
+// interactive, browser-only half: protected-resource metadata → auth-server
+// metadata → dynamic client registration → PKCE authorization-code flow in a
+// popup. Token storage/refresh live in @chat/core (mcp-auth.ts).
+import {
+  freshMcpConfig,
+  tokenRequest,
+  updateMcpServer,
+  type McpServerConfig,
+} from "@chat/core"
 
-export interface OAuthTokens {
-  accessToken: string
-  refreshToken?: string
-  expiresAt?: number
-}
-
-export interface McpOAuth {
-  clientId?: string
-  clientSecret?: string
-  tokenEndpoint?: string
-  resource?: string
-  tokens?: OAuthTokens
-}
+export { disconnectMcpServer, updateMcpServer } from "@chat/core"
 
 interface AsMetadata {
   authorization_endpoint: string
   token_endpoint: string
   registration_endpoint?: string
-}
-
-export function updateMcpServer(id: string, patch: Partial<McpServerConfig>) {
-  const servers = getPrefs().mcpServers ?? []
-  setPrefs({ mcpServers: servers.map((s) => (s.id === id ? { ...s, ...patch } : s)) })
-}
-
-function freshConfig(id: string): McpServerConfig | undefined {
-  return getPrefs().mcpServers?.find((s) => s.id === id)
 }
 
 function b64url(bytes: Uint8Array): string {
@@ -121,7 +104,7 @@ async function ensureClient(
   cfg: McpServerConfig,
   as: AsMetadata
 ): Promise<{ clientId: string; clientSecret?: string }> {
-  const existing = freshConfig(cfg.id)?.oauth
+  const existing = freshMcpConfig(cfg.id)?.oauth
   if (existing?.clientId) return { clientId: existing.clientId, clientSecret: existing.clientSecret }
   if (!as.registration_endpoint) {
     throw new Error(`"${cfg.name}" requires OAuth but doesn't offer automatic client registration.`)
@@ -140,32 +123,6 @@ async function ensureClient(
   if (!res.ok) throw new Error(`"${cfg.name}": client registration failed (${res.status})`)
   const json = (await res.json()) as { client_id: string; client_secret?: string }
   return { clientId: json.client_id, clientSecret: json.client_secret }
-}
-
-async function tokenRequest(
-  tokenEndpoint: string,
-  params: Record<string, string>,
-  clientSecret?: string
-): Promise<OAuthTokens> {
-  const body = new URLSearchParams(params)
-  if (clientSecret) body.set("client_secret", clientSecret)
-  const res = await fetch(tokenEndpoint, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body,
-  })
-  if (!res.ok) throw new Error(`token request failed (${res.status})`)
-  const json = (await res.json()) as {
-    access_token?: string
-    refresh_token?: string
-    expires_in?: number
-  }
-  if (!json.access_token) throw new Error("token response missing access_token")
-  return {
-    accessToken: json.access_token,
-    refreshToken: json.refresh_token,
-    expiresAt: json.expires_in ? Date.now() + (json.expires_in - 60) * 1000 : undefined,
-  }
 }
 
 function waitForCallback(state: string, popup: Window): Promise<string> {
@@ -205,7 +162,7 @@ export async function authorizeMcpServer(
   const popup = window.open("about:blank", "mcp-oauth", "width=600,height=750,popup")
   if (!popup) throw new Error("Popup blocked — allow popups for this site to connect.")
   try {
-    const cfg = freshConfig(cfgIn.id) ?? cfgIn
+    const cfg = freshMcpConfig(cfgIn.id) ?? cfgIn
     const { as, scope, resource } = await discover(cfg, wwwAuthenticate)
     const client = await ensureClient(cfg, as)
     const { verifier, challenge } = await pkce()
@@ -241,38 +198,4 @@ export async function authorizeMcpServer(
   } finally {
     if (!popup.closed) popup.close()
   }
-}
-
-/** Current access token, silently refreshed if expired. Null → interactive auth needed. */
-export async function getValidToken(serverId: string): Promise<string | null> {
-  const cfg = freshConfig(serverId)
-  const oauth = cfg?.oauth
-  if (!cfg || !oauth?.tokens) return null
-  const { tokens } = oauth
-  if (!tokens.expiresAt || tokens.expiresAt > Date.now()) return tokens.accessToken
-  if (!tokens.refreshToken || !oauth.tokenEndpoint || !oauth.clientId) return null
-  try {
-    const next = await tokenRequest(
-      oauth.tokenEndpoint,
-      {
-        grant_type: "refresh_token",
-        refresh_token: tokens.refreshToken,
-        client_id: oauth.clientId,
-        ...(oauth.resource && { resource: oauth.resource }),
-      },
-      oauth.clientSecret
-    )
-    updateMcpServer(cfg.id, {
-      oauth: { ...oauth, tokens: { refreshToken: tokens.refreshToken, ...next } },
-    })
-    return next.accessToken
-  } catch {
-    return null
-  }
-}
-
-export function disconnectMcpServer(serverId: string) {
-  const cfg = freshConfig(serverId)
-  if (!cfg) return
-  updateMcpServer(serverId, { oauth: { ...cfg.oauth, tokens: undefined } })
 }

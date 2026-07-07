@@ -1,6 +1,7 @@
 import { createParser } from "eventsource-parser"
 
-import { getValidToken, type McpOAuth } from "@/lib/mcp-oauth"
+import { coreFetch } from "./config"
+import { getValidToken, type McpOAuth } from "./mcp-auth"
 
 // Minimal MCP client over the Streamable HTTP transport (JSON-RPC 2.0 via POST;
 // responses arrive as plain JSON or as an SSE stream). Browser-direct, so the
@@ -57,7 +58,7 @@ class McpConnection {
   private async post(body: unknown, signal?: AbortSignal): Promise<Response> {
     let res: Response
     try {
-      res = await fetch(this.cfg.url, {
+      res = await coreFetch(this.cfg.url, {
         method: "POST",
         headers: await this.headers(),
         body: JSON.stringify(body),

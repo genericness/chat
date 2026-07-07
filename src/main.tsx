@@ -8,6 +8,9 @@ import "@fontsource-variable/jetbrains-mono"
 import "@fontsource/pixelify-sans"
 import "./index.css"
 
+// Platform wiring for @chat/core — must precede every other app import.
+import "@/lib/core-setup"
+
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { runJanitor } from "@/lib/db"

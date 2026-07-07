@@ -4,6 +4,12 @@
 
 export interface CorePorts {
   /**
+   * Raw prefs JSON string storage (localStorage-shaped). Parsing, caching,
+   * and change notification live in profiles.ts; the platform only stores
+   * the string (web: localStorage; mobile: SecureStore/AsyncStorage).
+   */
+  prefs: { get(): string | null; set(value: string): void }
+  /**
    * Platform fetch. Every network call in this package routes through it.
    * Web omits it (browser fetch). Mobile injects a wrapper over expo/fetch
    * that prefixes the app origin + auth header onto relative "/api" URLs.

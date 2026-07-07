@@ -11,7 +11,7 @@ import {
 } from "@/lib/db"
 import { fetchOpenRouterMeta, lookupMeta } from "@/hooks/use-models"
 import { killConversationSandboxes } from "@/lib/e2b"
-import { exaSearch, searchContextBlock } from "@/lib/exa"
+import { exaSearch, searchContextBlock } from "@chat/core"
 import {
   ApiError,
   streamChatCompletion,
