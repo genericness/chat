@@ -2,6 +2,7 @@
 // rendering anything that touches prefs or the store.
 import { configureCore, runSync, scheduleSync } from "@chat/core"
 import * as Crypto from "expo-crypto"
+import { router } from "expo-router"
 import { addDatabaseChangeListener } from "expo-sqlite"
 import { Alert, AppState } from "react-native"
 
@@ -27,7 +28,13 @@ export function initCore(): Promise<void> {
       prefs: prefsPort,
       fetch: mobileFetch,
       onError: (m) => Alert.alert("Error", m),
-      // onArtifact / onMcpAuthRequired / extraTools: later phases
+      // navigate dedupes, so streaming edit_artifact calls don't stack screens
+      onArtifact: (convId, artifactId) =>
+        router.navigate({
+          pathname: "/artifact/[convId]/[artifactId]",
+          params: { convId, artifactId },
+        }),
+      // onMcpAuthRequired / extraTools: later phases
     })
 
     // Sync triggers (mirrors web's Dexie hooks + focus/visibility listeners).

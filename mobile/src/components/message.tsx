@@ -1,4 +1,5 @@
 import { answerQuestion, regenerate, type Message } from "@chat/core"
+import { router } from "expo-router"
 import { useState } from "react"
 import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from "react-native"
 import Markdown from "react-native-markdown-display"
@@ -100,6 +101,32 @@ function ToolChips({ calls }: { calls: NonNullable<Message["toolCalls"]> }) {
   )
 }
 
+function ArtifactCards({ message }: { message: Message }) {
+  if (!message.artifacts?.length) return null
+  return (
+    <View className="mb-1.5 gap-1.5">
+      {message.artifacts.map((a) => (
+        <Pressable
+          key={a.artifactId}
+          className="flex-row items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 active:opacity-80"
+          onPress={() =>
+            router.navigate({
+              pathname: "/artifact/[convId]/[artifactId]",
+              params: { convId: message.convId, artifactId: a.artifactId },
+            })
+          }
+        >
+          <Text className="text-base">🖼️</Text>
+          <View className="flex-1">
+            <Text className="text-sm font-medium text-foreground">{a.title}</Text>
+            <Text className="text-xs text-muted">Tap to open preview</Text>
+          </View>
+        </Pressable>
+      ))}
+    </View>
+  )
+}
+
 function Stats({ stats }: { stats: NonNullable<Message["stats"]> }) {
   const parts: string[] = []
   if (stats.totalTokens) parts.push(`${stats.totalTokens} tok`)
@@ -135,6 +162,7 @@ export function MessageRow({ message }: { message: Message }) {
     >
       {message.model && <Text className="mb-0.5 text-xs text-muted">{message.model}</Text>}
       {!!message.toolCalls?.length && <ToolChips calls={message.toolCalls} />}
+      <ArtifactCards message={message} />
       {message.pendingQuestion && streaming && <QuestionCard q={message.pendingQuestion} />}
       {message.content ? (
         <Markdown style={mdStyles}>{message.content}</Markdown>
