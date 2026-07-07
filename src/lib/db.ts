@@ -2,8 +2,10 @@ import Dexie, { type EntityTable } from "dexie"
 
 import type { Conversation, Message } from "@chat/core"
 
-// The data-model types live in @chat/core (shared with mobile); re-export so
-// the rest of the app keeps importing them from here.
+// The data-model types and store-backed helpers live in @chat/core (shared
+// with mobile); re-export so the rest of the app keeps importing them from
+// here. The Dexie schema below is the web implementation of the CoreStore
+// port (see core-setup.ts) — DO NOT change it without a migration plan.
 export type {
   ArtifactSnapshot,
   Conversation,
@@ -14,6 +16,17 @@ export type {
   PendingQuestion,
   SearchResult,
   ToolCallRecord,
+} from "@chat/core"
+export {
+  autoTitle,
+  createConversation,
+  deleteAllConversations,
+  deleteConversation,
+  nextSeq,
+  promoteReply,
+  renameConversation,
+  runJanitor,
+  touchConversation,
 } from "@chat/core"
 
 export interface Attachment {
@@ -37,70 +50,3 @@ db.version(1).stores({
   messages: "id, convId, [convId+seq], replyTo, status",
   attachments: "id, convId",
 })
-
-export function autoTitle(text: string): string {
-  const line = text.trim().split("\n")[0]
-  return line.length > 60 ? `${line.slice(0, 60)}…` : line || "New chat"
-}
-
-export async function createConversation(firstText: string): Promise<Conversation> {
-  const now = Date.now()
-  const conv: Conversation = {
-    id: crypto.randomUUID(),
-    title: autoTitle(firstText),
-    createdAt: now,
-    updatedAt: now,
-  }
-  await db.conversations.add(conv)
-  return conv
-}
-
-export async function touchConversation(id: string) {
-  await db.conversations.update(id, { updatedAt: Date.now() })
-}
-
-export async function renameConversation(id: string, title: string) {
-  await db.conversations.update(id, { title, updatedAt: Date.now() })
-}
-
-export async function deleteConversation(id: string) {
-  // With sync on, keep a tombstone row so the delete propagates; the sync
-  // loop purges it after telling the server.
-  const { getPrefs } = await import("@/lib/profiles")
-  await db.transaction("rw", db.conversations, db.messages, db.attachments, async () => {
-    await db.messages.where("convId").equals(id).delete()
-    await db.attachments.where("convId").equals(id).delete()
-    if (getPrefs().syncEnabled) {
-      await db.conversations.update(id, { deletedAt: Date.now(), updatedAt: Date.now() })
-    } else {
-      await db.conversations.delete(id)
-    }
-  })
-}
-
-/** Delete every conversation (tombstoning each when sync is on so it propagates). */
-export async function deleteAllConversations() {
-  const convs = await db.conversations.filter((c) => !c.deletedAt).toArray()
-  for (const c of convs) await deleteConversation(c.id)
-  return convs.length
-}
-
-export async function nextSeq(convId: string): Promise<number> {
-  const last = await db.messages.where("[convId+seq]").between([convId, Dexie.minKey], [convId, Dexie.maxKey]).last()
-  return (last?.seq ?? -1) + 1
-}
-
-/** Make one reply the active branch among all siblings answering the same user message. */
-export async function promoteReply(msgId: string) {
-  const msg = await db.messages.get(msgId)
-  if (!msg?.replyTo) return
-  await db.transaction("rw", db.messages, async () => {
-    await db.messages.where("replyTo").equals(msg.replyTo!).modify({ active: false })
-    await db.messages.update(msgId, { active: true })
-  })
-}
-
-/** Recover messages stranded in "streaming" by a closed tab. Run once on boot. */
-export async function runJanitor() {
-  await db.messages.where("status").equals("streaming").modify({ status: "stopped" })
-}

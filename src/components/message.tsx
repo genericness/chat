@@ -24,9 +24,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { answerQuestion } from "@/lib/agent-tools"
+import { answerQuestion } from "@chat/core"
 import { db, type Message, type PendingQuestion } from "@/lib/db"
-import { editResend, regenerate } from "@/lib/generation"
+import { editResend, regenerate } from "@chat/core"
 import { openArtifactPanel } from "@/lib/panel"
 import { cn } from "@/lib/utils"
 

@@ -17,7 +17,7 @@ import { ChatSettings } from "@/components/chat-settings"
 import { ModelPicker } from "@/components/model-picker"
 import { Button } from "@/components/ui/button"
 import { db, type Message } from "@/lib/db"
-import { sendMessage, stopConversation } from "@/lib/generation"
+import { sendMessage, stopConversation } from "@chat/core"
 import { activeProfile, usePrefs } from "@/lib/profiles"
 import { cn } from "@/lib/utils"
 
@@ -97,7 +97,7 @@ export function Composer({ convId, className }: ComposerProps) {
     const t = text.trim()
     if ((!t && pending.length === 0) || isStreaming || needsPromote || sending) return
     setText("")
-    const files = pending.map((p) => p.file)
+    const files = pending.map((p) => ({ name: p.file.name, mime: p.file.type, data: p.file }))
     pending.forEach((p) => p.url && URL.revokeObjectURL(p.url))
     setPending([])
     setSending(true)

@@ -11,7 +11,7 @@ import {
 } from "@/components/message"
 import { Button } from "@/components/ui/button"
 import { promoteReply, type Message, type SearchResult } from "@/lib/db"
-import { stopGeneration } from "@/lib/generation"
+import { stopGeneration } from "@chat/core"
 import { cn } from "@/lib/utils"
 
 function CompareCard({

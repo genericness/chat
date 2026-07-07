@@ -1,29 +1,10 @@
-import { toast } from "sonner"
-
-import { AGENT_TOOL_DEFS, AGENT_TOOL_NAMES, executeAgentTool } from "@/lib/agent-tools"
-import type { SearchResult } from "@/lib/db"
-import { CODE_TOOL_DEFS, COMPUTER_TOOL_DEFS, E2B_TOOL_NAMES, executeE2bTool } from "@/lib/e2b-tools"
-import { exaContents, exaSearch, pageContentsBlock, searchContextBlock } from "@chat/core"
-import { connectMcp, McpAuthRequiredError } from "@chat/core"
-import { authorizeMcpServer } from "@/lib/mcp-oauth"
-import type { ToolDef } from "@chat/core"
-import { getPrefs } from "@/lib/profiles"
-
-/** Popups need a user gesture, so mid-send auth failures surface as an actionable toast. */
-function toastAuthRequired(err: McpAuthRequiredError) {
-  toast.error(`MCP server "${err.server.name}" needs authorization`, {
-    id: `mcp-auth-${err.server.id}`, // dedupe repeat failures
-    duration: 10_000,
-    action: {
-      label: "Connect",
-      onClick: () => {
-        void authorizeMcpServer(err.server, err.wwwAuthenticate)
-          .then(() => toast.success(`Connected to "${err.server.name}" — send again to use its tools.`))
-          .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
-      },
-    },
-  })
-}
+import { AGENT_TOOL_DEFS, AGENT_TOOL_NAMES, executeAgentTool } from "./agent-tools"
+import { ports } from "./config"
+import type { SearchResult } from "./db-types"
+import { exaContents, exaSearch, pageContentsBlock, searchContextBlock } from "./exa"
+import { connectMcp, McpAuthRequiredError } from "./mcp"
+import type { ToolDef } from "./openai"
+import { getPrefs } from "./profiles"
 
 export interface GatheredTools {
   defs: ToolDef[]
@@ -99,11 +80,9 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
   // fetch_url is available whenever an Exa key is set, even without the search
   // toggle — reading a link the user pastes is its own capability.
   if (getPrefs().exaKey) defs.push(FETCH_URL_DEF)
-  if (getPrefs().e2bKey) {
-    defs.push(...CODE_TOOL_DEFS)
-    // screenshots are useless to a model that can't see them
-    if (opts.vision !== false) defs.push(...COMPUTER_TOOL_DEFS)
-  }
+  // Platform-provided tools (web: E2B sandboxes/computer use; mobile: none yet).
+  const extra = ports().extraTools
+  if (extra) defs.push(...extra.defs({ vision: opts.vision }))
 
   for (const server of getPrefs().mcpServers ?? []) {
     if (!server.enabled) continue
@@ -129,8 +108,8 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
         })
       }
     } catch (err) {
-      if (err instanceof McpAuthRequiredError) toastAuthRequired(err)
-      else toast.error(err instanceof Error ? err.message : `MCP "${server.name}" failed`)
+      if (err instanceof McpAuthRequiredError) ports().onMcpAuthRequired?.(err)
+      else ports().onError?.(err instanceof Error ? err.message : `MCP "${server.name}" failed`)
     }
   }
 
@@ -156,11 +135,8 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
     })
     if (agentResult !== null) return agentResult
 
-    if (E2B_TOOL_NAMES.has(name)) {
-      // Only execute if the tool was actually offered (key present); a model
-      // that invents the name otherwise gets told, never a silent sandbox.
-      if (!getPrefs().e2bKey) return `Error: "${name}" is unavailable — no E2B API key is configured.`
-      const r = await executeE2bTool(name, args as Record<string, unknown>, {
+    if (extra?.names.has(name)) {
+      const r = await extra.execute(name, args as Record<string, unknown>, {
         convId: opts.convId,
         msgId: opts.msgId,
         pushImage: (url) => images.push(url),
@@ -196,7 +172,7 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
       return await route(args, signal)
     } catch (err) {
       // Token expired mid-conversation: tell the user how to fix it, tell the model why it failed.
-      if (err instanceof McpAuthRequiredError) toastAuthRequired(err)
+      if (err instanceof McpAuthRequiredError) ports().onMcpAuthRequired?.(err)
       throw err
     }
   }

@@ -1,9 +1,9 @@
 // Built-in agent tools: ask the user questions mid-generation, and build small
 // web apps rendered live in a sandboxed preview panel. Artifact snapshots are
 // stored on the assistant message, so they version and sync like everything else.
-import { db, type ArtifactSnapshot, type PendingQuestion } from "@/lib/db"
-import type { ToolDef } from "@chat/core"
-import { openArtifactPanel } from "@/lib/panel"
+import { ports, store } from "./config"
+import type { ArtifactSnapshot, PendingQuestion } from "./db-types"
+import type { ToolDef } from "./openai"
 
 export const AGENT_TOOL_DEFS: ToolDef[] = [
   {
@@ -73,7 +73,7 @@ export async function latestArtifact(
   convId: string,
   artifactId: string
 ): Promise<ArtifactSnapshot | undefined> {
-  const msgs = await db.messages.where("convId").equals(convId).sortBy("seq")
+  const msgs = await store().messages.byConv(convId)
   for (let i = msgs.length - 1; i >= 0; i--) {
     const snaps = msgs[i].artifacts
     if (!snaps) continue
@@ -112,9 +112,9 @@ export function withArtifactRuntime(html: string): string {
 }
 
 async function saveSnapshot(msgId: string, snap: ArtifactSnapshot) {
-  const msg = await db.messages.get(msgId)
+  const msg = await store().messages.get(msgId)
   const rest = (msg?.artifacts ?? []).filter((a) => a.artifactId !== snap.artifactId)
-  await db.messages.update(msgId, { artifacts: [...rest, snap] })
+  await store().messages.update(msgId, { artifacts: [...rest, snap] })
 }
 
 // ask_user: the executor parks on a promise resolved by the question card UI.
@@ -144,20 +144,21 @@ export async function executeAgentTool(
       options: Array.isArray(args.options) ? args.options.map(String).slice(0, 6) : undefined,
       multiple: args.multiple === true,
     }
-    await db.messages.update(ctx.msgId, { pendingQuestion: q })
+    await store().messages.update(ctx.msgId, { pendingQuestion: q })
     try {
       const answer = await new Promise<string>((resolve, reject) => {
         pendingAsks.set(ctx.toolCallId, { resolve, reject })
         ctx.signal.addEventListener(
           "abort",
-          () => reject(new DOMException("aborted", "AbortError")),
+          // Hermes has no DOMException; nothing type-checks it — only the name matters.
+          () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
           { once: true }
         )
       })
       return `The user answered: ${answer}`
     } finally {
       pendingAsks.delete(ctx.toolCallId)
-      await db.messages.update(ctx.msgId, { pendingQuestion: undefined })
+      await store().messages.update(ctx.msgId, { pendingQuestion: undefined })
     }
   }
 
@@ -170,7 +171,7 @@ export async function executeAgentTool(
       html: withArtifactRuntime(html),
     }
     await saveSnapshot(ctx.msgId, snap)
-    openArtifactPanel(ctx.convId, snap.artifactId)
+    ports().onArtifact?.(ctx.convId, snap.artifactId)
     return `Artifact "${snap.artifactId}" (${html.length} chars) is created and now visible to the user. Use edit_artifact for small follow-up changes.`
   }
 
@@ -192,7 +193,7 @@ export async function executeAgentTool(
       html: current.html.replace(find, String(args.replace ?? "")),
     }
     await saveSnapshot(ctx.msgId, snap)
-    openArtifactPanel(ctx.convId, id)
+    ports().onArtifact?.(ctx.convId, id)
     return `Edit applied — the user is seeing the updated artifact (${snap.html.length} chars).`
   }
 

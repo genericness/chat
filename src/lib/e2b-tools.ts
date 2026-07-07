@@ -1,7 +1,7 @@
 // E2B-backed agent tools: sandboxed code execution and desktop computer use.
 // Screenshots can't ride in OpenAI-compat tool results (text only), so they go
 // through an image side channel that generation.ts injects as user messages.
-import { saveArtifactSnapshot, withArtifactRuntime } from "@/lib/agent-tools"
+import { saveArtifactSnapshot, withArtifactRuntime } from "@chat/core"
 import { getCodeSandbox, getDesktop, type ComputerAction } from "@/lib/e2b"
 import type { ToolDef } from "@chat/core"
 import { openArtifactPanel, openComputerPanel } from "@/lib/panel"

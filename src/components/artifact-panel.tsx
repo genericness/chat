@@ -5,7 +5,7 @@ import { Code2, Download, ExternalLink, Eye, File, Monitor, Power, RotateCw, X }
 import { Markdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { latestArtifact } from "@/lib/agent-tools"
+import { latestArtifact } from "@chat/core"
 import type { ArtifactSnapshot } from "@/lib/db"
 import { killConversationSandboxes } from "@/lib/e2b"
 import { closeArtifactPanel, useArtifactPanel } from "@/lib/panel"

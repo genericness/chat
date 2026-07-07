@@ -1,29 +1,23 @@
-import { toast } from "sonner"
-
-import {
-  autoTitle,
-  createConversation,
-  db,
-  nextSeq,
-  touchConversation,
-  type Conversation,
-  type Message,
-} from "@/lib/db"
-import { fetchOpenRouterMeta, lookupMeta } from "@/hooks/use-models"
-import { killConversationSandboxes } from "@/lib/e2b"
-import { exaSearch, searchContextBlock } from "@chat/core"
+import { ports, store } from "./config"
+import { autoTitle, createConversation, nextSeq, touchConversation } from "./db-helpers"
+import type { Conversation, Message } from "./db-types"
+import { exaSearch, searchContextBlock } from "./exa"
+import { fetchOpenRouterMeta, lookupMeta } from "./models"
 import {
   ApiError,
   streamChatCompletion,
   type ChatMessage,
   type CompletionResult,
   type ContentPart,
+  type ToolCall,
   type ToolDef,
-} from "@chat/core"
-import { activeProfile, getPrefs, type Profile } from "@/lib/profiles"
-import { gatherTools } from "@/lib/tools"
+  type Usage,
+} from "./openai"
+import { activeProfile, getPrefs, type Profile } from "./profiles"
+import type { AttachmentInput } from "./store"
+import { gatherTools } from "./tools"
 
-// Module singleton: survives route changes; Dexie is the source of truth for UI.
+// Module singleton: survives route changes; the store is the source of truth for UI.
 const controllers = new Map<string, AbortController>()
 
 // Artifacts easily exceed 8K output tokens; models that reject a high cap get
@@ -75,14 +69,10 @@ export function stopGeneration(msgId: string) {
 }
 
 export async function stopConversation(convId: string) {
-  const streaming = await db.messages
-    .where("status")
-    .equals("streaming")
-    .filter((m) => m.convId === convId)
-    .toArray()
+  const streaming = (await store().messages.streaming()).filter((m) => m.convId === convId)
   for (const m of streaming) stopGeneration(m.id)
-  // Stop means stop paying: tear down any E2B sandboxes too.
-  void killConversationSandboxes(convId)
+  // Stop means stop paying: the platform tears down any sandboxes too.
+  ports().onConversationStop?.(convId)
 }
 
 function resolveTarget(conv: Conversation | undefined): {
@@ -105,30 +95,23 @@ function resolveTarget(conv: Conversation | undefined): {
   return { profile, model: models[0], models }
 }
 
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(blob)
-  })
-}
-
 /** Images become OpenAI multimodal parts; other files are inlined as fenced text. */
 async function userContent(m: Message): Promise<string | ContentPart[]> {
   let text = m.content
   // Search results captured at send time replay deterministically on regen/edit.
   if (m.searchResults?.length) text += searchContextBlock(m.searchResults)
   if (!m.attachmentIds?.length) return text
-  const atts = (await db.attachments.bulkGet(m.attachmentIds)).filter(
-    (a) => a !== undefined
-  )
   const imageParts: ContentPart[] = []
-  for (const a of atts) {
+  for (const id of m.attachmentIds) {
+    const a = await store().attachments.meta(id)
+    if (!a) continue
     if (a.mime.startsWith("image/")) {
-      imageParts.push({ type: "image_url", image_url: { url: await blobToDataUrl(a.blob) } })
+      imageParts.push({
+        type: "image_url",
+        image_url: { url: await store().attachments.asDataUrl(id) },
+      })
     } else {
-      text += `\n\n[Attached file: ${a.name}]\n\`\`\`\n${await a.blob.text()}\n\`\`\``
+      text += `\n\n[Attached file: ${a.name}]\n\`\`\`\n${await store().attachments.asText(id)}\n\`\`\``
     }
   }
   if (!imageParts.length) return text
@@ -136,8 +119,8 @@ async function userContent(m: Message): Promise<string | ContentPart[]> {
 }
 
 async function buildContext(convId: string, uptoSeq: number): Promise<ChatMessage[]> {
-  const conv = await db.conversations.get(convId)
-  const rows = await db.messages.where("convId").equals(convId).sortBy("seq")
+  const conv = await store().conversations.get(convId)
+  const rows = await store().messages.byConv(convId)
   const context: ChatMessage[] = []
 
   const systemPrompt = conv?.systemPrompt ?? getPrefs().globalSystemPrompt
@@ -159,7 +142,7 @@ export async function startAssistant(
   replyTo: string,
   opts: { profile: Profile; model: string; active: boolean; webSearch?: boolean }
 ): Promise<string> {
-  const conv = await db.conversations.get(convId)
+  const conv = await store().conversations.get(convId)
   const msg: Message = {
     id: crypto.randomUUID(),
     convId,
@@ -173,18 +156,18 @@ export async function startAssistant(
     status: "streaming",
     createdAt: Date.now(),
   }
-  await db.messages.add(msg)
+  await store().messages.add(msg)
   await touchConversation(convId)
 
   const context = await buildContext(convId, msg.seq)
   const controller = new AbortController()
   controllers.set(msg.id, controller)
 
-  // Throttled write-through: at most ~10 IDB writes/sec per stream.
+  // Throttled write-through: at most ~10 store writes/sec per stream.
   let buf = ""
   let roundBuf = ""
   let reasonBuf = ""
-  let timer: number | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
   // Executed/settled calls live in `journal`; calls whose arguments are still
   // streaming show up in `liveJournal` so the UI has progress before a round ends.
   const journal: NonNullable<Message["toolCalls"]> = []
@@ -196,10 +179,10 @@ export async function startAssistant(
   })
   const flush = () => {
     timer = undefined
-    void db.messages.update(msg.id, patch())
+    void store().messages.update(msg.id, patch())
   }
   const schedule = () => {
-    if (timer === undefined) timer = window.setTimeout(flush, 100)
+    if (timer === undefined) timer = setTimeout(flush, 100)
   }
   const onDelta = (text: string) => {
     if (!roundBuf && buf) buf += "\n\n" // visual break between tool rounds
@@ -211,7 +194,7 @@ export async function startAssistant(
     reasonBuf += text
     schedule()
   }
-  const onToolCallDelta = (calls: import("@chat/core").ToolCall[]) => {
+  const onToolCallDelta = (calls: ToolCall[]) => {
     liveJournal = calls.map((c, i) => ({
       id: c.id || `live_${i}`,
       name: c.function.name,
@@ -266,7 +249,7 @@ export async function startAssistant(
   let promptTokens = 0
   let completionTokens = 0
   let sawUsage = false
-  const addUsage = (u?: import("@chat/core").Usage) => {
+  const addUsage = (u?: Usage) => {
     if (!u) return
     sawUsage = true
     promptTokens += u.prompt_tokens ?? 0
@@ -389,7 +372,7 @@ export async function startAssistant(
             status: "running",
           })
         }
-        await db.messages.update(msg.id, { toolCalls: [...journal] })
+        await store().messages.update(msg.id, { toolCalls: [...journal] })
         // Truncated/malformed argument JSON must never go back to the provider —
         // Anthropic and others 400 on it. Sanitize in the transcript, then report
         // the failure to the model via the tool result so it can retry smaller.
@@ -428,23 +411,23 @@ export async function startAssistant(
             }
           }
           transcript.push({ role: "tool", tool_call_id: tc.id, content: output })
-          await db.messages.update(msg.id, { toolCalls: [...journal] })
+          await store().messages.update(msg.id, { toolCalls: [...journal] })
         }
         injectImages()
       }
 
-      window.clearTimeout(timer)
-      await db.messages.update(msg.id, {
+      clearTimeout(timer)
+      await store().messages.update(msg.id, {
         ...patch(),
         status: "done",
         stats: stats(),
         ...(gathered.sources.length && { searchResults: gathered.sources }),
       })
     } catch (err) {
-      window.clearTimeout(timer)
+      clearTimeout(timer)
       liveJournal = [] // drop never-executed streaming entries from the final state
       if (controller.signal.aborted) {
-        await db.messages.update(msg.id, {
+        await store().messages.update(msg.id, {
           ...patch(),
           status: "stopped",
           stats: stats(),
@@ -452,13 +435,13 @@ export async function startAssistant(
         })
       } else {
         const message = err instanceof Error ? err.message : String(err)
-        await db.messages.update(msg.id, {
+        await store().messages.update(msg.id, {
           ...patch(),
           status: "error",
           error: message,
           pendingQuestion: undefined,
         })
-        toast.error(message)
+        ports().onError?.(message)
       }
     } finally {
       controllers.delete(msg.id)
@@ -471,9 +454,9 @@ export async function startAssistant(
 
 /** Demote the current reply and stream a fresh sibling for the same user message. */
 export async function regenerate(assistantMsgId: string) {
-  const msg = await db.messages.get(assistantMsgId)
+  const msg = await store().messages.get(assistantMsgId)
   if (!msg || msg.role !== "assistant" || !msg.replyTo) return
-  const conv = await db.conversations.get(msg.convId)
+  const conv = await store().conversations.get(msg.convId)
   const prefs = getPrefs()
   // Prefer the endpoint/model that produced the original reply; fall back to current target.
   const sameProfile = prefs.profiles.find((p) => p.id === msg.profileId)
@@ -482,36 +465,32 @@ export async function regenerate(assistantMsgId: string) {
     : resolveTarget(conv)
   // Re-offer web search if the original reply used it as a tool (inject mode
   // replays automatically via the user message's stored results).
-  const userMsg = await db.messages.get(msg.replyTo)
+  const userMsg = await store().messages.get(msg.replyTo)
   const webSearch =
     !userMsg?.searchResults?.length &&
     (!!msg.searchResults?.length ||
       (msg.toolCalls ?? []).some((t) => t.name === "web_search"))
-  await db.messages.update(assistantMsgId, { active: false })
+  await store().messages.update(assistantMsgId, { active: false })
   await startAssistant(msg.convId, msg.replyTo, { ...target, active: true, webSearch })
 }
 
 /** Rewrite a user message, drop everything after it, and resend. */
 export async function editResend(userMsgId: string, newText: string) {
-  const msg = await db.messages.get(userMsgId)
+  const msg = await store().messages.get(userMsgId)
   if (!msg || msg.role !== "user") return
-  const conv = await db.conversations.get(msg.convId)
+  const conv = await store().conversations.get(msg.convId)
   const target = resolveTarget(conv)
 
-  const after = await db.messages
-    .where("convId")
-    .equals(msg.convId)
-    .filter((m) => m.seq > msg.seq)
-    .toArray()
+  const after = (await store().messages.byConv(msg.convId)).filter((m) => m.seq > msg.seq)
   for (const m of after) stopGeneration(m.id)
 
-  await db.transaction("rw", db.messages, db.attachments, db.conversations, async () => {
+  await store().transaction(async (s) => {
     const attachmentIds = after.flatMap((m) => m.attachmentIds ?? [])
-    if (attachmentIds.length) await db.attachments.bulkDelete(attachmentIds)
-    await db.messages.bulkDelete(after.map((m) => m.id))
-    await db.messages.update(userMsgId, { content: newText })
+    if (attachmentIds.length) await s.attachments.bulkDelete(attachmentIds)
+    await s.messages.bulkDelete(after.map((m) => m.id))
+    await s.messages.update(userMsgId, { content: newText })
     if (msg.seq === 0) {
-      await db.conversations.update(msg.convId, { title: autoTitle(newText) })
+      await s.conversations.update(msg.convId, { title: autoTitle(newText) })
     }
   })
 
@@ -522,10 +501,10 @@ export async function editResend(userMsgId: string, newText: string) {
 export async function sendMessage(
   convId: string | null,
   text: string,
-  files: File[] = [],
+  files: AttachmentInput[] = [],
   opts: { webSearch?: boolean } = {}
 ): Promise<string> {
-  let conv = convId ? await db.conversations.get(convId) : undefined
+  let conv = convId ? await store().conversations.get(convId) : undefined
   const target = resolveTarget(conv) // throws before any writes if unconfigured
 
   // Tool mode: models that support tool calling get a web_search tool and
@@ -554,14 +533,16 @@ export async function sendMessage(
   const attachmentIds: string[] = []
   for (const f of files) {
     const id = crypto.randomUUID()
-    await db.attachments.add({
-      id,
-      convId: conv.id,
-      name: f.name || "pasted-image.png",
-      mime: f.type || "application/octet-stream",
-      blob: f,
-      createdAt: Date.now(),
-    })
+    await store().attachments.add(
+      {
+        id,
+        convId: conv.id,
+        name: f.name || "pasted-image.png",
+        mime: f.mime || "application/octet-stream",
+        createdAt: Date.now(),
+      },
+      f.data
+    )
     attachmentIds.push(id)
   }
 
@@ -577,7 +558,7 @@ export async function sendMessage(
     status: "done",
     createdAt: Date.now(),
   }
-  await db.messages.add(userMsg)
+  await store().messages.add(userMsg)
 
   if (target.models.length > 1) {
     // Compare: all candidates start inactive; the user promotes one to continue.
