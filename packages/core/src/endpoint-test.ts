@@ -1,6 +1,7 @@
 // Shared "test this endpoint" probe for the onboarding wizard and settings:
 // one GET /models validates the URL, key, and CORS in a single shot and
 // doubles as the model list for picking a default.
+import { coreFetch } from "./config"
 
 export type EndpointTestResult =
   | { ok: true; models: string[] }
@@ -16,7 +17,7 @@ export async function testEndpoint(baseUrl: string, apiKey: string): Promise<End
 
   let res: Response
   try {
-    res = await fetch(`${baseUrl}/models`, { headers })
+    res = await coreFetch(`${baseUrl}/models`, { headers })
   } catch {
     return {
       ok: false,

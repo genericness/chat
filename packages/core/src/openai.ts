@@ -1,5 +1,7 @@
 import { createParser } from "eventsource-parser"
 
+import { coreFetch } from "./config"
+
 export interface ContentPartText {
   type: "text"
   text: string
@@ -111,7 +113,7 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<Comp
 
   let res: Response
   try {
-    res = await fetch(`${req.baseUrl}/chat/completions`, {
+    res = await coreFetch(`${req.baseUrl}/chat/completions`, {
       method: "POST",
       headers,
       signal: req.signal,

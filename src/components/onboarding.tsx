@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { fmtContext, fmtPricePerM, lookupMeta, useOpenRouterMeta } from "@/hooks/use-models"
-import { testEndpoint, type EndpointTestResult } from "@/lib/endpoint-test"
+import { testEndpoint, type EndpointTestResult } from "@chat/core"
 import { normalizeBaseUrl, PRESETS, setPrefs } from "@/lib/profiles"
 import { cn } from "@/lib/utils"
 

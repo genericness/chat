@@ -6,7 +6,7 @@ import { CODE_TOOL_DEFS, COMPUTER_TOOL_DEFS, E2B_TOOL_NAMES, executeE2bTool } fr
 import { exaContents, exaSearch, pageContentsBlock, searchContextBlock } from "@/lib/exa"
 import { connectMcp, McpAuthRequiredError } from "@/lib/mcp"
 import { authorizeMcpServer } from "@/lib/mcp-oauth"
-import type { ToolDef } from "@/lib/openai"
+import type { ToolDef } from "@chat/core"
 import { getPrefs } from "@/lib/profiles"
 
 /** Popups need a user gesture, so mid-send auth failures surface as an actionable toast. */

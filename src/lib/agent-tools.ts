@@ -2,7 +2,7 @@
 // web apps rendered live in a sandboxed preview panel. Artifact snapshots are
 // stored on the assistant message, so they version and sync like everything else.
 import { db, type ArtifactSnapshot, type PendingQuestion } from "@/lib/db"
-import type { ToolDef } from "@/lib/openai"
+import type { ToolDef } from "@chat/core"
 import { openArtifactPanel } from "@/lib/panel"
 
 export const AGENT_TOOL_DEFS: ToolDef[] = [

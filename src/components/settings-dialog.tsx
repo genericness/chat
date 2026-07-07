@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { db, deleteAllConversations } from "@/lib/db"
 
 import { useLogout, useMe } from "@/hooks/use-me"
-import { testEndpoint, type EndpointTestResult } from "@/lib/endpoint-test"
+import { testEndpoint, type EndpointTestResult } from "@chat/core"
 import { authorizeMcpServer, disconnectMcpServer } from "@/lib/mcp-oauth"
 
 function GithubIcon() {

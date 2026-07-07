@@ -3,7 +3,7 @@
 // through an image side channel that generation.ts injects as user messages.
 import { saveArtifactSnapshot, withArtifactRuntime } from "@/lib/agent-tools"
 import { getCodeSandbox, getDesktop, type ComputerAction } from "@/lib/e2b"
-import type { ToolDef } from "@/lib/openai"
+import type { ToolDef } from "@chat/core"
 import { openArtifactPanel, openComputerPanel } from "@/lib/panel"
 
 export const CODE_TOOL_DEFS: ToolDef[] = [

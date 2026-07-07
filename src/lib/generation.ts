@@ -19,7 +19,7 @@ import {
   type CompletionResult,
   type ContentPart,
   type ToolDef,
-} from "@/lib/openai"
+} from "@chat/core"
 import { activeProfile, getPrefs, type Profile } from "@/lib/profiles"
 import { gatherTools } from "@/lib/tools"
 
@@ -211,7 +211,7 @@ export async function startAssistant(
     reasonBuf += text
     schedule()
   }
-  const onToolCallDelta = (calls: import("@/lib/openai").ToolCall[]) => {
+  const onToolCallDelta = (calls: import("@chat/core").ToolCall[]) => {
     liveJournal = calls.map((c, i) => ({
       id: c.id || `live_${i}`,
       name: c.function.name,
@@ -266,7 +266,7 @@ export async function startAssistant(
   let promptTokens = 0
   let completionTokens = 0
   let sawUsage = false
-  const addUsage = (u?: import("@/lib/openai").Usage) => {
+  const addUsage = (u?: import("@chat/core").Usage) => {
     if (!u) return
     sawUsage = true
     promptTokens += u.prompt_tokens ?? 0
