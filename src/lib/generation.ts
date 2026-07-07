@@ -260,6 +260,27 @@ export async function startAssistant(
     }
   }
 
+  // Token usage + wall-time for the stats tooltip; declared out here so the
+  // catch block (stopped/error) can report partial stats too.
+  const startedAt = Date.now()
+  let promptTokens = 0
+  let completionTokens = 0
+  let sawUsage = false
+  const addUsage = (u?: import("@/lib/openai").Usage) => {
+    if (!u) return
+    sawUsage = true
+    promptTokens += u.prompt_tokens ?? 0
+    completionTokens += u.completion_tokens ?? 0
+  }
+  const stats = (): NonNullable<Message["stats"]> => ({
+    durationMs: Date.now() - startedAt,
+    ...(sawUsage && {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+    }),
+  })
+
   void (async () => {
     try {
       const meta = lookupMeta(
@@ -352,6 +373,7 @@ export async function startAssistant(
           result = await requestRound(transcript, [])
         }
         liveJournal = [] // round settled — real entries replace the streaming ones
+        addUsage(result.usage)
         if (!result.toolCalls.length) {
           if (result.finishReason === "length") {
             buf += "\n\n*(response was cut off by the max tokens limit)*"
@@ -415,6 +437,7 @@ export async function startAssistant(
       await db.messages.update(msg.id, {
         ...patch(),
         status: "done",
+        stats: stats(),
         ...(gathered.sources.length && { searchResults: gathered.sources }),
       })
     } catch (err) {
@@ -424,6 +447,7 @@ export async function startAssistant(
         await db.messages.update(msg.id, {
           ...patch(),
           status: "stopped",
+          stats: stats(),
           pendingQuestion: undefined,
         })
       } else {

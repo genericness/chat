@@ -19,11 +19,62 @@ import { Markdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { answerQuestion } from "@/lib/agent-tools"
 import { db, type Message, type PendingQuestion } from "@/lib/db"
 import { editResend, regenerate } from "@/lib/generation"
 import { openArtifactPanel } from "@/lib/panel"
 import { cn } from "@/lib/utils"
+
+function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${ms} ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
+  const m = Math.floor(ms / 60_000)
+  const s = Math.round((ms % 60_000) / 1000)
+  return `${m}m ${s}s`
+}
+
+/** Hover-for-detail generation stats under an assistant reply. */
+function StatsBadge({ stats }: { stats: NonNullable<Message["stats"]> }) {
+  const secs = stats.durationMs / 1000
+  const tps =
+    stats.completionTokens && secs > 0
+      ? (stats.completionTokens / secs).toFixed(1)
+      : null
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="cursor-default px-1 text-xs text-muted-foreground/70 tabular-nums">
+            {fmtDuration(stats.durationMs)}
+            {tps ? ` · ${tps} tok/s` : ""}
+          </span>
+        }
+      />
+      <TooltipContent className="flex-col items-start gap-0.5">
+        <span>{fmtDuration(stats.durationMs)} to generate</span>
+        {stats.completionTokens != null ? (
+          <>
+            <span>{stats.completionTokens.toLocaleString()} output tokens</span>
+            {tps && <span>{tps} tokens/sec</span>}
+            {stats.promptTokens != null && (
+              <span className="text-background/70">
+                {stats.promptTokens.toLocaleString()} prompt ·{" "}
+                {(stats.totalTokens ?? 0).toLocaleString()} total
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-background/70">token usage not reported</span>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
 
 /** Streamed chain-of-thought: expanded while the model is thinking, collapsed after. */
 export function Reasoning({ message }: { message: Message }) {
@@ -365,6 +416,7 @@ export const MessageBubble = memo(function MessageBubble({
           {message.status === "stopped" && message.content && (
             <span className="text-xs text-muted-foreground">stopped</span>
           )}
+          {message.stats && <StatsBadge stats={message.stats} />}
         </div>
       )}
     </div>

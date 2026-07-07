@@ -33,6 +33,14 @@ export interface ToolCallRecord {
   status: "streaming" | "running" | "done" | "error"
 }
 
+export interface MessageStats {
+  promptTokens?: number
+  completionTokens?: number
+  totalTokens?: number
+  /** Wall-clock generation time in milliseconds. */
+  durationMs: number
+}
+
 /** Full artifact state as of this message — latest snapshot in the thread wins. */
 export interface ArtifactSnapshot {
   artifactId: string
@@ -65,6 +73,7 @@ export interface Message {
   toolCalls?: ToolCallRecord[]
   artifacts?: ArtifactSnapshot[]
   pendingQuestion?: PendingQuestion
+  stats?: MessageStats
   active: boolean
   status: MessageStatus
   error?: string

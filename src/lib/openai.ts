@@ -55,10 +55,18 @@ export interface CompletionRequest {
   onToolCallDelta?: (calls: ToolCall[]) => void
 }
 
+export interface Usage {
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+}
+
 export interface CompletionResult {
   toolCalls: ToolCall[]
   /** "length" means the output was cut off by the max-tokens limit. */
   finishReason?: string
+  /** Token usage, when the provider reports it. */
+  usage?: Usage
 }
 
 function errorMessage(payload: unknown, fallback: string): string {
@@ -111,6 +119,8 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<Comp
         model: req.model,
         messages: req.messages,
         stream: true,
+        // ask for a final usage chunk so we can show token counts / tok/s
+        stream_options: { include_usage: true },
         ...(req.tools?.length && { tools: req.tools }),
         ...(req.toolChoice && { tool_choice: req.toolChoice }),
         ...(req.temperature !== undefined && { temperature: req.temperature }),
@@ -149,11 +159,13 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<Comp
     return {
       toolCalls: (message?.tool_calls ?? []) as ToolCall[],
       finishReason: choice?.finish_reason ?? undefined,
+      usage: json.usage as Usage | undefined,
     }
   }
 
   let streamError: string | null = null
   let finishReason: string | undefined
+  let usage: Usage | undefined
   const parser = createParser({
     onEvent(event) {
       if (event.data === "[DONE]") return
@@ -165,6 +177,7 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<Comp
       }
       const obj = json as {
         error?: unknown
+        usage?: Usage
         choices?: {
           finish_reason?: string | null
           delta?: {
@@ -179,6 +192,8 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<Comp
         streamError = errorMessage(obj, "Provider returned an error mid-stream")
         return
       }
+      // The usage chunk arrives last, usually with an empty choices array.
+      if (obj.usage) usage = obj.usage
       const choice = obj.choices?.[0]
       if (choice?.finish_reason) finishReason = choice.finish_reason
       const delta = choice?.delta
@@ -210,5 +225,6 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<Comp
       .filter(Boolean)
       .map((tc, i) => ({ ...tc, id: tc.id || `call_${i}` })),
     finishReason,
+    usage,
   }
 }
