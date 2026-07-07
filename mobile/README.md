@@ -1,56 +1,61 @@
-# Welcome to your Expo app 👋
+# chat — mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo app for [chat.4x.rip](https://chat.4x.rip). All chat/streaming/tool logic
+comes from `@chat/core` (see `packages/core`); this package is the mobile
+platform shell: SQLite storage, SecureStore keys, expo-router UI.
 
-## Get started
+## Dev loop (no Mac required)
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```sh
+pnpm install                       # from the repo root
+cd mobile
+npx expo start                     # Metro dev server
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+First time on a physical phone you need a **development build** (Expo Go can't
+load the expo-sqlite/secure-store config plugins):
 
-### Other setup steps
+```sh
+npx eas login                      # once
+npx eas build --profile development --platform android   # or ios
+# install the resulting build on the phone, then `npx expo start` and scan
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+iOS builds compile on EAS's cloud Macs — Linux/Windows work fine.
 
-## Learn more
+## Sanity checks that run without a device
 
-To learn more about developing your project with Expo, look at the following resources:
+```sh
+npx tsc --noEmit                   # typecheck
+npx expo export --platform android # full Metro bundle (catches resolution/babel issues)
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Store release
 
-## Join the community
+```sh
+npx eas build -p all --profile production
+npx eas submit -p ios              # App Store Connect (needs Apple Developer Program)
+npx eas submit -p android          # Play Console (first upload is manual via web UI)
+```
 
-Join our community of developers creating universal apps.
+Checklist before first submission:
+- Replace template icons/splash in `assets/images/` (still Expo defaults).
+- App Store review notes: BYOK app — reviewers need a demo API key (use a
+  low-limit OpenRouter key) and a line explaining keys never leave the device.
+- Add `"usesNonExemptEncryption": false` under `ios.infoPlist.ITSAppUsesNonExemptEncryption`
+  equivalents in app.json (HTTPS only) to skip the export-compliance questionnaire.
+- Play data safety: keys stored on-device; opt-in sync stores chat content in
+  the app's backend (D1/R2).
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Platform notes
+
+- Provider calls have no CORS on native; the worker proxies are still used for
+  Exa and OpenCode (same `/api/*` routes, prefixed with the app origin in
+  `src/lib/fetch.ts`, which also attaches the session bearer token).
+- Auth: `chat4x://auth` custom-scheme redirect carries the bearer token; it's
+  the same encrypted payload as the web session cookie, plus an `exp`.
+- E2B sandboxes/computer-use are web-only for now (`extraTools` port left
+  unset in `src/lib/setup.ts`).
+- Prefs secrets (API keys) live in SecureStore, one entry per key; the rest of
+  the prefs JSON is in AsyncStorage (`src/lib/prefs.ts`). MCP OAuth tokens
+  currently ride in the AsyncStorage half.
