@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import { AGENT_TOOL_DEFS, AGENT_TOOL_NAMES, executeAgentTool } from "@/lib/agent-tools"
 import type { SearchResult } from "@/lib/db"
 import { CODE_TOOL_DEFS, COMPUTER_TOOL_DEFS, E2B_TOOL_NAMES, executeE2bTool } from "@/lib/e2b-tools"
-import { exaSearch, searchContextBlock } from "@/lib/exa"
+import { exaContents, exaSearch, pageContentsBlock, searchContextBlock } from "@/lib/exa"
 import { connectMcp, McpAuthRequiredError } from "@/lib/mcp"
 import { authorizeMcpServer } from "@/lib/mcp-oauth"
 import type { ToolDef } from "@/lib/openai"
@@ -64,6 +64,26 @@ const WEB_SEARCH_DEF: ToolDef = {
   },
 }
 
+const FETCH_URL_DEF: ToolDef = {
+  type: "function",
+  function: {
+    name: "fetch_url",
+    description:
+      "Fetch the live, full text of one or more web pages by URL. Use this when the user gives you a link or you already know the exact page to read, instead of searching. Returns each page's main content as markdown.",
+    parameters: {
+      type: "object",
+      properties: {
+        urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "One or more page URLs to read",
+        },
+      },
+      required: ["urls"],
+    },
+  },
+}
+
 function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")
 }
@@ -76,6 +96,9 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
   const mcpRoutes = new Map<string, (args: unknown, signal: AbortSignal) => Promise<string>>()
 
   if (opts.webSearch) defs.push(WEB_SEARCH_DEF)
+  // fetch_url is available whenever an Exa key is set, even without the search
+  // toggle — reading a link the user pastes is its own capability.
+  if (getPrefs().exaKey) defs.push(FETCH_URL_DEF)
   if (getPrefs().e2bKey) {
     defs.push(...CODE_TOOL_DEFS)
     // screenshots are useless to a model that can't see them
@@ -88,7 +111,12 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
       const { conn, tools } = await connectMcp(server)
       for (const tool of tools) {
         const qualified = `${slug(server.name)}__${tool.name}`.slice(0, 64)
-        if (mcpRoutes.has(qualified) || qualified === "web_search" || AGENT_TOOL_NAMES.has(qualified))
+        if (
+          mcpRoutes.has(qualified) ||
+          qualified === "web_search" ||
+          qualified === "fetch_url" ||
+          AGENT_TOOL_NAMES.has(qualified)
+        )
           continue
         mcpRoutes.set(qualified, (args, signal) => conn.callTool(tool.name, args, signal))
         defs.push({
@@ -147,6 +175,21 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
       sources.push(...results)
       return searchContextBlock(results)
     }
+
+    if (name === "fetch_url") {
+      const a = args as { urls?: unknown; url?: unknown }
+      const urls = Array.isArray(a.urls)
+        ? a.urls.map(String)
+        : [a.urls, a.url].filter((v): v is string => typeof v === "string")
+      if (!urls.length) return "Error: provide one or more urls."
+      const pages = await exaContents(urls)
+      // Lightweight source pills for the UI; the model gets the full text below.
+      for (const p of pages) {
+        if (!p.error) sources.push({ title: p.title, url: p.url, text: p.text.slice(0, 200) })
+      }
+      return pageContentsBlock(pages)
+    }
+
     const route = mcpRoutes.get(name)
     if (!route) return `Error: unknown tool "${name}"`
     try {
