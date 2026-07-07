@@ -1,0 +1,12 @@
+{
+  "name": "@chat/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "eventsource-parser": "^3.1.0"
+  }
+}

@@ -11,6 +11,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.6.0
         version: 1.6.0(@types/react@19.2.17)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@chat/core':
+        specifier: workspace:*
+        version: link:packages/core
       '@e2b/code-interpreter':
         specifier: ^2.6.1
         version: 2.6.1
@@ -132,6 +135,12 @@ importers:
       wrangler:
         specifier: ^4.0.0
         version: 4.107.0(@cloudflare/workers-types@4.20260702.1)
+
+  packages/core:
+    dependencies:
+      eventsource-parser:
+        specifier: ^3.1.0
+        version: 3.1.0
 
 packages:
 
