@@ -188,6 +188,12 @@
   html {
     @apply font-sans;
   }
+  /* No rubber-band chaining or pull-to-refresh in WebViews — the app shell
+     never scrolls; inner regions own their scrolling. */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
   body {
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);

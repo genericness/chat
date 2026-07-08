@@ -40,7 +40,7 @@ function CompareCard({
           </Button>
         )}
       </div>
-      <div className="max-h-96 flex-1 overflow-y-auto px-3 py-2">
+      <div className="max-h-96 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
         {message.status === "error" ? (
           <p className="text-sm text-destructive">{message.error}</p>
         ) : (
