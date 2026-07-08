@@ -53,7 +53,17 @@ function upstreamError(text: string, fallback: string): string {
     const msg = typeof parsed.error === "object" ? parsed.error?.message : undefined
     if (typeof msg === "string") return msg
   } catch {
-    // not JSON
+    // Not JSON. chatgpt.com's WAF blocks Cloudflare Worker egress (subrequests
+    // carry an unremovable cf-worker header) with an HTML bot challenge — the
+    // codex leg must route through a non-Worker egress instead.
+    if (/<(!doctype|html)/i.test(text)) {
+      return (
+        "ChatGPT's edge blocked this server's request (bot challenge). " +
+        "Route the codex leg through scripts/codex-forwarder.mjs and set CODEX_BASE_URL."
+      )
+    }
+    const snippet = text.replace(/\s+/g, " ").trim().slice(0, 160)
+    if (snippet) return `${fallback}: ${snippet}`
   }
   return fallback
 }
@@ -122,7 +132,10 @@ chatgpt.post("/auth/refresh", async (c) => {
 })
 
 /** Auth headers the codex backend expects, from the client's per-request auth. */
-function codexHeaders(c: { req: { header: (name: string) => string | undefined } }) {
+function codexHeaders(c: {
+  req: { header: (name: string) => string | undefined }
+  env: AppEnv["Bindings"]
+}): Record<string, string> | undefined {
   const auth = c.req.header("authorization")
   const account = c.req.header("chatgpt-account-id")
   if (!auth || !account) return undefined
@@ -131,6 +144,8 @@ function codexHeaders(c: { req: { header: (name: string) => string | undefined }
     "chatgpt-account-id": account,
     originator: ORIGINATOR,
     "openai-beta": "responses=experimental",
+    // Authenticates us to a self-hosted codex forwarder (see CODEX_BASE_URL).
+    ...(c.env.CODEX_PROXY_SECRET && { "x-forwarder-secret": c.env.CODEX_PROXY_SECRET }),
   }
 }
 

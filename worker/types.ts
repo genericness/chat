@@ -10,7 +10,10 @@ export interface Bindings {
   APP_BASE_URL: string
   /** Test/escape hatches for the ChatGPT provider; default to the real hosts. */
   CHATGPT_ISSUER?: string
+  /** chatgpt.com blocks Worker egress — point this at scripts/codex-forwarder.mjs. */
   CODEX_BASE_URL?: string
+  /** Shared secret sent to the forwarder as x-forwarder-secret. */
+  CODEX_PROXY_SECRET?: string
 }
 
 export interface Variables {
