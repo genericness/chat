@@ -27,6 +27,7 @@ import {
 import { answerQuestion } from "@/lib/agent-tools"
 import { db, type Message, type PendingQuestion } from "@/lib/db"
 import { editResend, regenerate } from "@/lib/generation"
+import { haptic } from "@/lib/haptics"
 import { openArtifactPanel } from "@/lib/panel"
 import { cn } from "@/lib/utils"
 
@@ -289,6 +290,7 @@ function CopyButton({ text }: { text: string }) {
       aria-label="Copy message"
       onClick={() => {
         void navigator.clipboard.writeText(text)
+        haptic()
         setCopied(true)
         setTimeout(() => setCopied(false), 1500)
       }}

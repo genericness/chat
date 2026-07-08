@@ -20,6 +20,7 @@ import {
   useOpenRouterMeta,
   type ModelMeta,
 } from "@/hooks/use-models"
+import { haptic } from "@/lib/haptics"
 import { setPrefs, usePrefs, type Profile } from "@/lib/profiles"
 import { cn } from "@/lib/utils"
 
@@ -54,6 +55,7 @@ export function ModelPicker({ profile }: { profile?: Profile }) {
   ]
 
   const toggle = (id: string, multi: boolean) => {
+    haptic()
     if (multi) {
       const next = selected.includes(id)
         ? selected.filter((s) => s !== id)

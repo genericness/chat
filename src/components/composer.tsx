@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { useBackClose } from "@/hooks/use-back-close"
 import { db, type Message } from "@/lib/db"
 import { sendMessage, stopConversation } from "@/lib/generation"
+import { haptic } from "@/lib/haptics"
 import { activeProfile, usePrefs } from "@/lib/profiles"
 import { cn } from "@/lib/utils"
 
@@ -98,6 +99,7 @@ export function Composer({ convId, className }: ComposerProps) {
   const send = async () => {
     const t = text.trim()
     if ((!t && pending.length === 0) || isStreaming || needsPromote || sending) return
+    haptic()
     setText("")
     const files = pending.map((p) => p.file)
     pending.forEach((p) => p.url && URL.revokeObjectURL(p.url))
@@ -220,7 +222,11 @@ export function Composer({ convId, className }: ComposerProps) {
               size="icon"
               variant="secondary"
               className="shrink-0 rounded-full"
-              onClick={() => convId && void stopConversation(convId)}
+              onClick={() => {
+                if (!convId) return
+                haptic("medium")
+                void stopConversation(convId)
+              }}
               aria-label="Stop generating"
             >
               <Square className="size-4 fill-current" />
