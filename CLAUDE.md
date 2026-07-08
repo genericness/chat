@@ -15,6 +15,7 @@ Core promise, do not break it: **API keys and chats never leave the browser.** K
 - Package manager **pnpm**. Three tsconfigs: app / `tsconfig.worker.json` / node.
 - `pnpm dev` · `pnpm build` (typechecks app+worker then builds — run before committing) · `pnpm run deploy` (build + `wrangler deploy`) · `pnpm cf-typegen`.
 - CF resources: D1 `chat` + R2 `chat-media` (see `wrangler.jsonc`). OAuth needs `GITHUB_CLIENT_SECRET` + `COOKIE_SECRET` via `wrangler secret put`; `GITHUB_CLIENT_ID` is a var.
+- **Mobile (Capacitor 8)**: `pnpm run build:app` (bakes `VITE_API_BASE=https://chat.4x.rip`, then `cap sync`); release AAB/APK via `cd android && JAVA_HOME=~/jdk-21 ANDROID_HOME=~/Android/Sdk ./gradlew bundleRelease` (signing keys in gitignored `android/keystore.properties` + `upload-keystore.jks` — back them up). Native detection: `IS_NATIVE`/`apiFetch` in `src/lib/api-base.ts`; native-only code in `src/lib/native.ts` behind literal `import.meta.env.VITE_API_BASE` guards so web bundles stay Capacitor-free. Deep links: `chat4x://` (GitHub + MCP OAuth). **Never enable the CapacitorHttp plugin — it buffers responses and breaks SSE streaming.**
 
 ## Git conventions
 
