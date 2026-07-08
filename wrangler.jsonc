@@ -22,7 +22,11 @@
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "chat-media" }],
   "vars": {
     "GITHUB_CLIENT_ID": "Ov23lieN0LD75ShVPOjg",
-    "APP_BASE_URL": "https://chat.4x.rip"
+    "APP_BASE_URL": "https://chat.4x.rip",
+    // chatgpt.com WAF-blocks Worker egress; the codex leg detours through the
+    // forwarder (github.com/genericness/codex-forwarder, deployed on Railway).
+    // Pair with `wrangler secret put CODEX_PROXY_SECRET`.
+    "CODEX_BASE_URL": "https://codex-forwarder.4x.rip/codex"
   },
   "routes": [{ "pattern": "chat.4x.rip", "custom_domain": true }]
 }

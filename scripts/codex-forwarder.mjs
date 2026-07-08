@@ -32,6 +32,10 @@ const FORWARD = ["authorization", "chatgpt-account-id", "originator", "openai-be
 
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost")
+  if (url.pathname === "/healthz") {
+    res.writeHead(200, { "content-type": "application/json" })
+    return res.end('{"ok":true}')
+  }
   if (SECRET && req.headers["x-forwarder-secret"] !== SECRET) {
     res.writeHead(401, { "content-type": "application/json" })
     return res.end('{"detail":"forwarder secret required"}')
