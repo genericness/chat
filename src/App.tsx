@@ -7,6 +7,7 @@ import { ChatSearch } from "@/components/chat-search"
 import { Onboarding } from "@/components/onboarding"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { Button } from "@/components/ui/button"
+import { useBackClose } from "@/hooks/use-back-close"
 import { usePrefs } from "@/lib/profiles"
 import { cn } from "@/lib/utils"
 
@@ -22,6 +23,11 @@ export function App() {
   const needsSetup = !prefs.onboardedAt && prefs.profiles.length === 0
   const openSettings = () =>
     needsSetup ? setWizardOpen(true) : setSettingsOpen(true)
+
+  useBackClose(sidebarOpen, () => setSidebarOpen(false))
+  useBackClose(settingsOpen, () => setSettingsOpen(false))
+  useBackClose(searchOpen, () => setSearchOpen(false))
+  useBackClose(wizardOpen, () => setWizardOpen(false))
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

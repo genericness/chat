@@ -5,6 +5,7 @@ import { App } from "@capacitor/app"
 import { Browser } from "@capacitor/browser"
 
 import { API_BASE, setAuthToken } from "@/lib/api-base"
+import { handleBack } from "@/lib/back-stack"
 
 let onAuthChanged: (() => void) | undefined
 let deepLinkWaiter: ((params: URLSearchParams) => void) | undefined
@@ -25,6 +26,13 @@ export function initNative(opts: { onAuthChanged: () => void }) {
       deepLinkWaiter?.(new URLSearchParams(url.split("?")[1] ?? ""))
       deepLinkWaiter = undefined
     }
+  })
+  // Android hardware back: close the top-most overlay first, then history,
+  // then hand the app to the launcher.
+  void App.addListener("backButton", ({ canGoBack }) => {
+    if (handleBack()) return
+    if (canGoBack) history.back()
+    else void App.minimizeApp()
   })
 }
 

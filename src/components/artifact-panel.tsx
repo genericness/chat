@@ -5,6 +5,7 @@ import { Code2, Download, ExternalLink, Eye, File, Monitor, Power, RotateCw, X }
 import { Markdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useBackClose } from "@/hooks/use-back-close"
 import { latestArtifact } from "@/lib/agent-tools"
 import { IS_NATIVE } from "@/lib/api-base"
 import type { ArtifactSnapshot } from "@/lib/db"
@@ -77,6 +78,7 @@ export function ArtifactPanel({ convId }: { convId: string }) {
   const panel = useArtifactPanel()
   const [reloadKey, setReloadKey] = useState(0)
   const [view, setView] = useState<"preview" | "code">("preview")
+  useBackClose(!!panel && panel.convId === convId, closeArtifactPanel)
 
   const artifact = useLiveQuery(
     () =>

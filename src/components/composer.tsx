@@ -16,6 +16,7 @@ import { toast } from "sonner"
 import { ChatSettings } from "@/components/chat-settings"
 import { ModelPicker } from "@/components/model-picker"
 import { Button } from "@/components/ui/button"
+import { useBackClose } from "@/hooks/use-back-close"
 import { db, type Message } from "@/lib/db"
 import { sendMessage, stopConversation } from "@/lib/generation"
 import { activeProfile, usePrefs } from "@/lib/profiles"
@@ -43,6 +44,7 @@ export function Composer({ convId, className }: ComposerProps) {
   const navigate = useNavigate()
   const prefs = usePrefs()
   const profile = activeProfile(prefs)
+  useBackClose(chatSettingsOpen, () => setChatSettingsOpen(false))
 
   const streaming = useLiveQuery(
     () =>
