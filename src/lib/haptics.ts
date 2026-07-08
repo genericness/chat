@@ -12,3 +12,18 @@ export function haptic(style: "light" | "medium" = "light") {
       .catch(() => {})
   }
 }
+
+// Selection-tick while a reply streams in. Rate-limited globally so compare
+// mode (several concurrent streams) doesn't turn into a continuous buzz.
+let lastTick = 0
+
+export function streamTick() {
+  if (import.meta.env.VITE_API_BASE) {
+    const now = Date.now()
+    if (now - lastTick < 150) return
+    lastTick = now
+    void import("@capacitor/haptics")
+      .then(({ Haptics }) => Haptics.selectionChanged())
+      .catch(() => {})
+  }
+}

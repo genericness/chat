@@ -12,6 +12,7 @@ import {
 import { fetchOpenRouterMeta, lookupMeta } from "@/hooks/use-models"
 import { killConversationSandboxes } from "@/lib/e2b"
 import { exaSearch, searchContextBlock } from "@/lib/exa"
+import { haptic, streamTick } from "@/lib/haptics"
 import {
   ApiError,
   streamChatCompletion,
@@ -196,6 +197,7 @@ export async function startAssistant(
   })
   const flush = () => {
     timer = undefined
+    streamTick()
     void db.messages.update(msg.id, patch())
   }
   const schedule = () => {
@@ -434,6 +436,7 @@ export async function startAssistant(
       }
 
       window.clearTimeout(timer)
+      haptic()
       await db.messages.update(msg.id, {
         ...patch(),
         status: "done",
