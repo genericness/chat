@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { IS_NATIVE, apiFetch, setAuthToken } from "@/lib/api-base"
+
 export interface Me {
   id: number
   login: string
@@ -13,7 +15,7 @@ export function useMe() {
     retry: false,
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<Me | null> => {
-      const res = await fetch("/api/me", { credentials: "same-origin" })
+      const res = await apiFetch("/api/me", { credentials: "same-origin" })
       if (res.status === 401) return null
       if (!res.ok) throw new Error("me failed")
       return res.json()
@@ -24,7 +26,9 @@ export function useMe() {
 export function useLogout() {
   const qc = useQueryClient()
   return async () => {
-    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" })
+    // Native sessions are a stateless bearer token — discarding it is the logout.
+    if (IS_NATIVE) setAuthToken(null)
+    else await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" })
     qc.setQueryData(["me"], null)
   }
 }

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react"
 
+import { API_BASE } from "@/lib/api-base"
 import type { McpServerConfig } from "@/lib/mcp"
 
 export interface Profile {
@@ -44,7 +45,7 @@ export const PRESETS: Preset[] = [
   { name: "NavyAI", baseUrl: "https://api.navy/v1" },
   {
     name: "OpenCode Zen",
-    baseUrl: "/api/opencode/go/v1",
+    baseUrl: `${API_BASE}/api/opencode/go/v1`,
     hint: "OpenCode blocks direct browser calls, so this routes through this app's server. Your key and messages transit the proxy per request — never stored or logged.",
   },
   {

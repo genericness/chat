@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api-base"
 import type { SearchResult } from "@/lib/db"
 import { getPrefs } from "@/lib/profiles"
 
@@ -6,7 +7,7 @@ export async function exaSearch(query: string): Promise<SearchResult[]> {
   if (!key) throw new Error("Add your Exa API key in Settings to use web search.")
   if (!query.trim()) throw new Error("Web search needs some text to search for.")
 
-  const res = await fetch("/api/exa/search", {
+  const res = await apiFetch("/api/exa/search", {
     method: "POST",
     headers: { "content-type": "application/json", "x-exa-key": key },
     body: JSON.stringify({
@@ -44,7 +45,7 @@ export async function exaContents(urls: string[]): Promise<PageContent[]> {
   const cleaned = urls.map((u) => u.trim()).filter(Boolean)
   if (!cleaned.length) throw new Error("No URL provided.")
 
-  const res = await fetch("/api/exa/contents", {
+  const res = await apiFetch("/api/exa/contents", {
     method: "POST",
     headers: { "content-type": "application/json", "x-exa-key": key },
     body: JSON.stringify({

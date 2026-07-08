@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api-base"
 import { db, type Conversation, type Message } from "@/lib/db"
 import { getPrefs, setPrefs } from "@/lib/profiles"
 
@@ -21,7 +22,7 @@ async function pushAttachments(convId: string) {
   for (const a of atts) {
     if (a.syncedAt) continue
     if (a.blob.size > MAX_ATTACHMENT_BYTES) continue // over the 8MB cap: stays local-only
-    const res = await fetch(`/api/sync/attachments/${a.id}`, {
+    const res = await apiFetch(`/api/sync/attachments/${a.id}`, {
       method: "PUT",
       credentials: "same-origin",
       headers: { "content-type": a.mime, "x-attachment-name": a.name },
@@ -35,7 +36,7 @@ async function pullAttachments(convId: string, messages: Message[]) {
   const wanted = messages.flatMap((m) => m.attachmentIds ?? [])
   for (const id of wanted) {
     if (await db.attachments.get(id)) continue
-    const res = await fetch(`/api/sync/attachments/${id}`, { credentials: "same-origin" })
+    const res = await apiFetch(`/api/sync/attachments/${id}`, { credentials: "same-origin" })
     if (!res.ok) continue // not uploaded (e.g. over cap on the other device)
     await db.attachments.put({
       id,
@@ -55,7 +56,7 @@ async function push(conv: Conversation) {
   const messages = (await db.messages.where("convId").equals(conv.id).sortBy("seq")).filter(
     (m) => JSON.stringify(m).length < 1_500_000
   )
-  const res = await fetch(`/api/sync/chats/${conv.id}`, {
+  const res = await apiFetch(`/api/sync/chats/${conv.id}`, {
     method: "PUT",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
@@ -69,7 +70,7 @@ async function push(conv: Conversation) {
 }
 
 async function pull(id: string) {
-  const res = await fetch(`/api/sync/chats/${id}`, { credentials: "same-origin" })
+  const res = await apiFetch(`/api/sync/chats/${id}`, { credentials: "same-origin" })
   if (!res.ok) return
   const { conversation, messages } = (await res.json()) as {
     conversation: Conversation
@@ -99,7 +100,7 @@ export async function runSync(): Promise<void> {
   if (running || !getPrefs().syncEnabled) return
   running = true
   try {
-    const res = await fetch("/api/sync/manifest", { credentials: "same-origin" })
+    const res = await apiFetch("/api/sync/manifest", { credentials: "same-origin" })
     if (res.status === 401) {
       // Signed out: sync stays enabled in prefs but cannot run.
       return
@@ -117,7 +118,7 @@ export async function runSync(): Promise<void> {
       if (conv.deletedAt) {
         let confirmed = true
         if (r && !r.deleted) {
-          const res = await fetch(`/api/sync/chats/${conv.id}`, {
+          const res = await apiFetch(`/api/sync/chats/${conv.id}`, {
             method: "DELETE",
             credentials: "same-origin",
           })

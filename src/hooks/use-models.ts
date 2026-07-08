@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
+import { apiFetch } from "@/lib/api-base"
 import type { Profile } from "@/lib/profiles"
 
 export interface ModelMeta {
@@ -15,7 +16,7 @@ export interface ModelMeta {
 // Module-level cache so non-React code (generation.ts) can consult metadata too.
 let metaPromise: Promise<Map<string, ModelMeta>> | undefined
 export function fetchOpenRouterMeta(): Promise<Map<string, ModelMeta>> {
-  metaPromise ??= fetch("/api/openrouter/models")
+  metaPromise ??= apiFetch("/api/openrouter/models")
     .then(async (res) => {
       if (!res.ok) throw new Error("metadata fetch failed")
       const json = (await res.json()) as { data: ModelMeta[] }
