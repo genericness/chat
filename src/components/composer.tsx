@@ -152,7 +152,9 @@ export function Composer({ convId, className }: ComposerProps) {
             ))}
           </div>
         )}
-        <div className="flex items-end gap-1 sm:gap-1.5">
+        {/* Phones: textarea takes the full top row, controls sit underneath.
+            sm+: everything on one row with the textarea flexing. */}
+        <div className="flex flex-wrap items-end gap-1 sm:flex-nowrap sm:gap-1.5">
           <input
             ref={fileInput}
             type="file"
@@ -190,7 +192,7 @@ export function Composer({ convId, className }: ComposerProps) {
             }}
             placeholder={needsPromote ? "Pick a response to continue" : "Ask anything"}
             disabled={needsPromote}
-            className="max-h-44 min-h-8 flex-1 resize-none self-center bg-transparent px-1 py-1 text-base leading-6 outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60 sm:text-[0.95rem]"
+            className="order-first max-h-44 min-h-8 w-full resize-none self-center bg-transparent px-2 pt-1.5 pb-1 text-base leading-6 outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60 sm:order-none sm:w-auto sm:flex-1 sm:px-1 sm:py-1 sm:text-[0.95rem]"
           />
           <Button
             variant="ghost"
@@ -216,6 +218,7 @@ export function Composer({ convId, className }: ComposerProps) {
               <SlidersHorizontal className="size-4" />
             </Button>
           )}
+          <div aria-hidden className="grow sm:hidden" />
           <ModelPicker profile={profile} />
           {isStreaming ? (
             <Button
