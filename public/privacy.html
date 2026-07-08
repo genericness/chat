@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — Chat</title>
+    <style>
+      body {
+        max-width: 42rem;
+        margin: 3rem auto;
+        padding: 0 1.25rem;
+        font: 16px/1.6 system-ui, sans-serif;
+        background: #141320;
+        color: #e7e5f4;
+      }
+      h1, h2 { line-height: 1.25; }
+      a { color: #a795ff; }
+    </style>
+  </head>
+  <body>
+    <h1>Privacy Policy</h1>
+    <p>
+      Chat (chat.4x.rip and the Chat mobile app, published by bough limited) is a
+      bring-your-own-key client for AI chat APIs. It is designed so that your data
+      stays on your device.
+    </p>
+
+    <h2>What stays on your device</h2>
+    <ul>
+      <li><strong>API keys</strong> are stored only in your browser or app's local storage. They are never sent to our server, never synced, and never logged.</li>
+      <li><strong>Conversations</strong> are stored locally on your device (IndexedDB).</li>
+      <li>Messages you send go directly from your device to the AI provider you configured, under that provider's privacy policy.</li>
+    </ul>
+
+    <h2>Optional account and sync</h2>
+    <p>
+      You can optionally sign in with GitHub to sync conversations across devices.
+      If you do, we store your GitHub id, username, display name, and avatar URL,
+      plus the conversations you choose to sync, on our server (Cloudflare D1/R2).
+      We do not read GitHub data beyond your public profile, and we discard the
+      GitHub access token immediately after sign-in. Deleting a conversation
+      deletes it from the server. Signing out stops sync; you can disable it at any
+      time in Settings.
+    </p>
+
+    <h2>Proxied requests</h2>
+    <p>
+      A few features route through our server only because the third-party service
+      blocks direct browser requests (web search via Exa, and the OpenCode Zen
+      provider). Those requests pass your key through per-request; it is not stored
+      or logged.
+    </p>
+
+    <h2>Analytics</h2>
+    <p>
+      We collect anonymous, aggregate usage analytics (page views) that are not
+      linked to your identity. No advertising, no tracking across other sites, no
+      sale of data.
+    </p>
+
+    <h2>Contact</h2>
+    <p>Questions: <a href="mailto:claude@4x.rip">claude@4x.rip</a></p>
+  </body>
+</html>
