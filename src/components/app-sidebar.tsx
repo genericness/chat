@@ -111,7 +111,7 @@ export function AppSidebar({
           >
             <Search />
             Search chats
-            <kbd className="ml-auto text-xs text-muted-foreground/70">⌘K</kbd>
+            <kbd className="ml-auto text-xs text-muted-foreground/70 pointer-coarse:hidden">⌘K</kbd>
           </Button>
         </div>
 

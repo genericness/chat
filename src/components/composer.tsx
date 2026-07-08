@@ -205,7 +205,7 @@ export function Composer({ convId, className }: ComposerProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="hidden shrink-0 rounded-full text-muted-foreground sm:flex"
+              className="shrink-0 rounded-full text-muted-foreground"
               aria-label="Chat settings"
               onClick={() => setChatSettingsOpen(true)}
             >
