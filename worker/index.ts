@@ -4,6 +4,7 @@ import type { AppEnv } from "./types"
 import { getSessionUserId } from "./lib/cookies"
 import { getUserById } from "./lib/db"
 import auth from "./routes/auth"
+import chatgpt from "./routes/chatgpt"
 import exa from "./routes/exa"
 import opencode from "./routes/opencode"
 import openrouter from "./routes/openrouter"
@@ -15,6 +16,7 @@ const app = new Hono<AppEnv>()
 app.use("/api/*", cors({ origin: ["capacitor://localhost", "https://localhost"] }))
 
 app.route("/api/auth", auth)
+app.route("/api/chatgpt", chatgpt)
 app.route("/api/openrouter", openrouter)
 app.route("/api/exa", exa)
 app.route("/api/opencode", opencode)

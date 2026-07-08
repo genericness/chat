@@ -8,6 +8,9 @@ export interface Bindings {
   GITHUB_CLIENT_SECRET: string
   COOKIE_SECRET: string
   APP_BASE_URL: string
+  /** Test/escape hatches for the ChatGPT provider; default to the real hosts. */
+  CHATGPT_ISSUER?: string
+  CODEX_BASE_URL?: string
 }
 
 export interface Variables {

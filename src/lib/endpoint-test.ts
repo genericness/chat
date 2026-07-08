@@ -2,6 +2,8 @@
 // one GET /models validates the URL, key, and CORS in a single shot and
 // doubles as the model list for picking a default.
 
+import { chatgptAuthHeaders, isChatGPTBaseUrl } from "@/lib/chatgpt"
+
 export type EndpointTestResult =
   | { ok: true; models: string[] }
   | { ok: false; reason: "auth" | "unreachable" | "no-models"; detail: string }
@@ -12,6 +14,17 @@ export async function testEndpoint(baseUrl: string, apiKey: string): Promise<End
   if (/^https:\/\/api\.anthropic\.com/.test(baseUrl)) {
     headers["anthropic-dangerous-direct-browser-access"] = "true"
     headers["x-api-key"] = apiKey
+  }
+  if (isChatGPTBaseUrl(baseUrl)) {
+    try {
+      Object.assign(headers, await chatgptAuthHeaders())
+    } catch (err) {
+      return {
+        ok: false,
+        reason: "auth",
+        detail: err instanceof Error ? err.message : String(err),
+      }
+    }
   }
 
   let res: Response

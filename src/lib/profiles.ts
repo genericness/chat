@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react"
 
 import { API_BASE } from "@/lib/api-base"
+import type { ChatGPTAuth } from "@/lib/chatgpt"
 import type { McpServerConfig } from "@/lib/mcp"
 
 export interface Profile {
@@ -18,6 +19,8 @@ export interface Prefs {
   globalSystemPrompt?: string
   exaKey?: string
   e2bKey?: string
+  /** "Sign in with ChatGPT" tokens — this browser only, like every key here. */
+  chatgptAuth?: ChatGPTAuth
   mcpServers?: McpServerConfig[]
   syncEnabled?: boolean
   lastSyncAt?: number
@@ -32,6 +35,11 @@ export interface Preset {
 
 export const PRESETS: Preset[] = [
   { name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
+  {
+    name: "ChatGPT",
+    baseUrl: `${API_BASE}/api/chatgpt/v1`,
+    hint: "Uses your ChatGPT plan via sign-in — no API key. ChatGPT blocks direct browser calls, so requests route through this app's server; tokens and messages transit per request, never stored or logged. Append :low or :high to a model id to change reasoning effort.",
+  },
   { name: "OpenAI", baseUrl: "https://api.openai.com/v1" },
   { name: "Anthropic", baseUrl: "https://api.anthropic.com/v1" },
   {

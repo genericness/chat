@@ -1,5 +1,7 @@
 import { createParser } from "eventsource-parser"
 
+import { chatgptAuthHeaders, isChatGPTBaseUrl } from "@/lib/chatgpt"
+
 export interface ContentPartText {
   type: "text"
   text: string
@@ -108,6 +110,8 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<Comp
     headers["anthropic-dangerous-direct-browser-access"] = "true"
     headers["x-api-key"] = req.apiKey
   }
+  // ChatGPT profiles carry no API key: OAuth tokens from prefs, refreshed here.
+  if (isChatGPTBaseUrl(req.baseUrl)) Object.assign(headers, await chatgptAuthHeaders())
 
   let res: Response
   try {

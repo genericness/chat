@@ -7,8 +7,11 @@ import { IS_NATIVE } from "@/lib/api-base"
 import { db, deleteAllConversations } from "@/lib/db"
 
 import { useLogout, useMe } from "@/hooks/use-me"
+import { CHATGPT_DEFAULT_MODEL, isChatGPTBaseUrl } from "@/lib/chatgpt"
 import { testEndpoint, type EndpointTestResult } from "@/lib/endpoint-test"
 import { authorizeMcpServer, disconnectMcpServer } from "@/lib/mcp-oauth"
+
+import { ChatGPTSignIn } from "@/components/chatgpt-sign-in"
 
 function GithubIcon() {
   return (
@@ -183,6 +186,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const preset = PRESETS.find(
     (p) => normalizeBaseUrl(p.baseUrl) === normalizeBaseUrl(draft.baseUrl)
   )
+  const isChatGPT = isChatGPTBaseUrl(normalizeBaseUrl(draft.baseUrl))
   const isHttp =
     draft.baseUrl.startsWith("http://") &&
     !/^http:\/\/(localhost|127\.0\.0\.1)/.test(draft.baseUrl)
@@ -321,6 +325,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                         ...d,
                         name: d.name || pr.name,
                         baseUrl: pr.baseUrl,
+                        // ChatGPT signs in instead of taking a key.
+                        ...(isChatGPTBaseUrl(pr.baseUrl) && {
+                          apiKey: "",
+                          defaultModel: d.defaultModel || CHATGPT_DEFAULT_MODEL,
+                        }),
                       }))
                     }
                   >
@@ -365,21 +374,25 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   </p>
                 )}
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="profile-key">API key</Label>
-                <Input
-                  id="profile-key"
-                  type="password"
-                  value={draft.apiKey}
-                  onChange={(e) =>
-                    setDraft({ ...draft, apiKey: e.target.value })
-                  }
-                  placeholder="sk-… (leave empty for local servers)"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Stored in localStorage on this device only.
-                </p>
-              </div>
+              {isChatGPT ? (
+                <ChatGPTSignIn />
+              ) : (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="profile-key">API key</Label>
+                  <Input
+                    id="profile-key"
+                    type="password"
+                    value={draft.apiKey}
+                    onChange={(e) =>
+                      setDraft({ ...draft, apiKey: e.target.value })
+                    }
+                    placeholder="sk-… (leave empty for local servers)"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Stored in localStorage on this device only.
+                  </p>
+                </div>
+              )}
               <div className="grid gap-1.5">
                 <Label htmlFor="profile-model">Default model</Label>
                 <Input

@@ -13,7 +13,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ChatGPTSignIn } from "@/components/chatgpt-sign-in"
 import { fmtContext, fmtPricePerM, lookupMeta, useOpenRouterMeta } from "@/hooks/use-models"
+import { CHATGPT_DEFAULT_MODEL, isChatGPTBaseUrl } from "@/lib/chatgpt"
 import { testEndpoint, type EndpointTestResult } from "@/lib/endpoint-test"
 import { normalizeBaseUrl, PRESETS, setPrefs } from "@/lib/profiles"
 import { cn } from "@/lib/utils"
@@ -39,6 +41,7 @@ export function Onboarding({ open, onClose }: { open: boolean; onClose: () => vo
 
   const models = test.state === "done" && test.result.ok ? test.result.models : []
   const preset = PRESETS.find((p) => normalizeBaseUrl(p.baseUrl) === normalizeBaseUrl(draft.baseUrl))
+  const isChatGPT = isChatGPTBaseUrl(normalizeBaseUrl(draft.baseUrl))
 
   const runTest = async () => {
     setTest({ state: "testing" })
@@ -153,7 +156,16 @@ export function Onboarding({ open, onClose }: { open: boolean; onClose: () => vo
                   variant={preset?.name === pr.name ? "secondary" : "outline"}
                   size="xs"
                   onClick={() => {
-                    setDraft((d) => ({ ...d, name: pr.name, baseUrl: pr.baseUrl }))
+                    setDraft((d) => ({
+                      ...d,
+                      name: pr.name,
+                      baseUrl: pr.baseUrl,
+                      // ChatGPT signs in instead of taking a key.
+                      ...(isChatGPTBaseUrl(pr.baseUrl) && {
+                        apiKey: "",
+                        defaultModel: d.defaultModel || CHATGPT_DEFAULT_MODEL,
+                      }),
+                    }))
                     setTest({ state: "idle" })
                   }}
                 >
@@ -174,19 +186,23 @@ export function Onboarding({ open, onClose }: { open: boolean; onClose: () => vo
               />
               {preset?.hint && <p className="text-xs text-muted-foreground">{preset.hint}</p>}
             </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="ob-key">API key</Label>
-              <Input
-                id="ob-key"
-                type="password"
-                value={draft.apiKey}
-                onChange={(e) => {
-                  setDraft({ ...draft, apiKey: e.target.value })
-                  setTest({ state: "idle" })
-                }}
-                placeholder="sk-… (leave empty for local servers)"
-              />
-            </div>
+            {isChatGPT ? (
+              <ChatGPTSignIn />
+            ) : (
+              <div className="grid gap-1.5">
+                <Label htmlFor="ob-key">API key</Label>
+                <Input
+                  id="ob-key"
+                  type="password"
+                  value={draft.apiKey}
+                  onChange={(e) => {
+                    setDraft({ ...draft, apiKey: e.target.value })
+                    setTest({ state: "idle" })
+                  }}
+                  placeholder="sk-… (leave empty for local servers)"
+                />
+              </div>
+            )}
 
             <div className="flex items-center gap-2.5">
               <Button

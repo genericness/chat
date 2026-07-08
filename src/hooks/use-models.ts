@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { apiFetch } from "@/lib/api-base"
+import { chatgptAuthHeaders, isChatGPTBaseUrl } from "@/lib/chatgpt"
 import type { Profile } from "@/lib/profiles"
 
 export interface ModelMeta {
@@ -58,6 +59,9 @@ export function useEndpointModels(profile?: Profile) {
       if (/^https:\/\/api\.anthropic\.com/.test(profile!.baseUrl)) {
         headers["anthropic-dangerous-direct-browser-access"] = "true"
         headers["x-api-key"] = profile!.apiKey
+      }
+      if (isChatGPTBaseUrl(profile!.baseUrl)) {
+        Object.assign(headers, await chatgptAuthHeaders())
       }
       const res = await fetch(`${profile!.baseUrl}/models`, { headers })
       if (!res.ok) throw new Error(`models list failed (${res.status})`)
