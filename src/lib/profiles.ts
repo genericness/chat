@@ -52,9 +52,14 @@ export const PRESETS: Preset[] = [
   { name: "Mistral", baseUrl: "https://api.mistral.ai/v1" },
   { name: "NavyAI", baseUrl: "https://api.navy/v1" },
   {
-    name: "OpenCode Zen",
+    name: "OpenCode Go",
     baseUrl: `${API_BASE}/api/opencode/go/v1`,
-    hint: "OpenCode blocks direct browser calls, so this routes through this app's server. Your key and messages transit the proxy per request — never stored or logged.",
+    hint: "Open-source coding models (GLM, Kimi, DeepSeek, MiMo, MiniMax, Qwen) via the OpenCode gateway. Browser calls are blocked, so requests route through this app's server; your key and messages transit per request — never stored or logged. Model ids are openai-compatible (chat/completions).",
+  },
+  {
+    name: "OpenCode Zen",
+    baseUrl: `${API_BASE}/api/opencode/zen/v1`,
+    hint: "OpenCode's gateway for open models (DeepSeek, GLM, Kimi, MiniMax, Grok, etc.) over OpenAI-compatible chat/completions. Browser calls are blocked, so requests route through this app's server; your key and messages transit per request — never stored or logged. Note: GPT/Codex models use Zen's /v1/responses API, which this client doesn't support yet.",
   },
   {
     name: "Ollama",

@@ -1,17 +1,23 @@
 import { Hono } from "hono"
 import type { AppEnv } from "../types"
 
-// OpenCode Zen doesn't send CORS headers, so the browser can't call it directly
-// like every other provider. We proxy it same-origin: `/api/opencode/<rest>` →
-// `https://opencode.ai/zen/<rest>`, forwarding the user's key in the
-// Authorization header per request. The key (and the prompt/response) transit
-// the worker but are never stored or logged.
+// OpenCode (Go and Zen) don't send CORS headers, so the browser can't call
+// them directly like every other provider. We proxy them same-origin,
+// forwarding the user's key in the Authorization header per request. The key
+// (and the prompt/response) transit the worker but are never stored or logged.
+//
+//   `/api/opencode/zen/<rest>` → `https://opencode.ai/zen/<rest>`
+//   `/api/opencode/go/<rest>`  → `https://opencode.ai/zen/go/<rest>`
+//
+// (OpenCode Go lives under the Zen gateway path, not a top-level /go path.)
 const opencode = new Hono<AppEnv>()
 
 opencode.all("/*", async (c) => {
   const url = new URL(c.req.url)
   const rest = url.pathname.replace(/^\/api\/opencode\//, "")
-  const target = `https://opencode.ai/zen/${rest}${url.search}`
+  const target = rest.startsWith("go/")
+    ? `https://opencode.ai/zen/${rest}${url.search}`
+    : `https://opencode.ai/zen/${rest.replace(/^zen\//, "")}${url.search}`
 
   const headers: Record<string, string> = {}
   const auth = c.req.header("authorization")
