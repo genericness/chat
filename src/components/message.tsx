@@ -29,7 +29,6 @@ import { db, type Message, type PendingQuestion } from "@/lib/db"
 import { editResend, regenerate } from "@/lib/generation"
 import { haptic } from "@/lib/haptics"
 import { openArtifactPanel } from "@/lib/panel"
-import { useStreamedMessage } from "@/lib/stream-state"
 import { cn } from "@/lib/utils"
 
 function fmtDuration(ms: number): string {
@@ -52,7 +51,6 @@ function StatsBadge({ stats }: { stats: NonNullable<Message["stats"]> }) {
       <PopoverTrigger
         openOnHover
         delay={150}
-        nativeButton={false}
         render={
           <span className="cursor-default px-1 text-xs text-muted-foreground/70 tabular-nums">
             {fmtDuration(stats.durationMs)}
@@ -312,7 +310,6 @@ export const MessageBubble = memo(function MessageBubble({
   /** Search results for citation links; defaults to the message's own. */
   sources?: Message["searchResults"]
 }) {
-  message = useStreamedMessage(message)
   const citeSources = message.searchResults ?? sources
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")

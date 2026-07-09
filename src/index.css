@@ -240,25 +240,6 @@
   padding-block: 2px;
 }
 
-/* Skip layout and paint for off-screen history while retaining a remembered
-   intrinsic block size after each row has been visited. */
-.message-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 10rem;
-}
-
-.markdown-stream-tail::after {
-  content: "";
-  display: inline-block;
-  width: 0.5rem;
-  height: 1em;
-  margin-left: 2px;
-  vertical-align: text-bottom;
-  border-radius: 2px;
-  background: color-mix(in oklch, var(--primary), transparent 30%);
-  animation: cursor-blink 1s ease-in-out infinite;
-}
-
 /* Inline [n] citations linking to web-search sources */
 .prose a.citation {
   color: var(--primary);

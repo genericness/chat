@@ -1,13 +1,7 @@
 // Built-in agent tools: ask the user questions mid-generation, and build small
 // web apps rendered live in a sandboxed preview panel. Artifact snapshots are
 // stored on the assistant message, so they version and sync like everything else.
-import {
-  artifactHeadKey,
-  db,
-  type ArtifactHead,
-  type ArtifactSnapshot,
-  type PendingQuestion,
-} from "@/lib/db"
+import { db, type ArtifactSnapshot, type PendingQuestion } from "@/lib/db"
 import type { ToolDef } from "@/lib/openai"
 import { openArtifactPanel } from "@/lib/panel"
 
@@ -79,10 +73,15 @@ export async function latestArtifact(
   convId: string,
   artifactId: string
 ): Promise<ArtifactSnapshot | undefined> {
-  const head = await db.artifactHeads.get(artifactHeadKey(convId, artifactId))
-  if (!head) return undefined
-  const message = await db.messages.get(head.messageId)
-  return message?.artifacts?.find((snapshot) => snapshot.artifactId === artifactId)
+  const msgs = await db.messages.where("convId").equals(convId).sortBy("seq")
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const snaps = msgs[i].artifacts
+    if (!snaps) continue
+    for (let j = snaps.length - 1; j >= 0; j--) {
+      if (snaps[j].artifactId === artifactId) return snaps[j]
+    }
+  }
+  return undefined
 }
 
 export async function saveArtifactSnapshot(msgId: string, snap: ArtifactSnapshot) {
@@ -113,21 +112,9 @@ export function withArtifactRuntime(html: string): string {
 }
 
 async function saveSnapshot(msgId: string, snap: ArtifactSnapshot) {
-  await db.transaction("rw", db.messages, db.artifactHeads, async () => {
-    const msg = await db.messages.get(msgId)
-    if (!msg) return
-    const rest = (msg.artifacts ?? []).filter((a) => a.artifactId !== snap.artifactId)
-    const head: ArtifactHead = {
-      key: artifactHeadKey(msg.convId, snap.artifactId),
-      convId: msg.convId,
-      artifactId: snap.artifactId,
-      messageId: msg.id,
-      seq: msg.seq,
-    }
-    const current = await db.artifactHeads.get(head.key)
-    await db.messages.update(msgId, { artifacts: [...rest, snap] })
-    if (!current || msg.seq >= current.seq) await db.artifactHeads.put(head)
-  })
+  const msg = await db.messages.get(msgId)
+  const rest = (msg?.artifacts ?? []).filter((a) => a.artifactId !== snap.artifactId)
+  await db.messages.update(msgId, { artifacts: [...rest, snap] })
 }
 
 // ask_user: the executor parks on a promise resolved by the question card UI.

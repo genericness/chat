@@ -105,15 +105,10 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
     if (opts.vision !== false) defs.push(...COMPUTER_TOOL_DEFS)
   }
 
-  const servers = (getPrefs().mcpServers ?? []).filter((server) => server.enabled)
-  const connected = await Promise.allSettled(servers.map((server) => connectMcp(server)))
-  // Promise.allSettled preserves input order, so server and tool ordering stays
-  // deterministic even though cold handshakes happen concurrently.
-  for (let i = 0; i < connected.length; i++) {
-    const server = servers[i]
-    const result = connected[i]
-    if (result.status === "fulfilled") {
-      const { conn, tools } = result.value
+  for (const server of getPrefs().mcpServers ?? []) {
+    if (!server.enabled) continue
+    try {
+      const { conn, tools } = await connectMcp(server)
       for (const tool of tools) {
         const qualified = `${slug(server.name)}__${tool.name}`.slice(0, 64)
         if (
@@ -133,8 +128,7 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
           },
         })
       }
-    } else {
-      const err = result.reason
+    } catch (err) {
       if (err instanceof McpAuthRequiredError) toastAuthRequired(err)
       else toast.error(err instanceof Error ? err.message : `MCP "${server.name}" failed`)
     }

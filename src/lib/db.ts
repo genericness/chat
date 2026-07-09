@@ -90,20 +90,10 @@ export interface Attachment {
   syncedAt?: number
 }
 
-/** Derived pointer to the newest snapshot of one artifact in a conversation. */
-export interface ArtifactHead {
-  key: string
-  convId: string
-  artifactId: string
-  messageId: string
-  seq: number
-}
-
 export const db = new Dexie("chat") as Dexie & {
   conversations: EntityTable<Conversation, "id">
   messages: EntityTable<Message, "id">
   attachments: EntityTable<Attachment, "id">
-  artifactHeads: EntityTable<ArtifactHead, "key">
 }
 
 db.version(1).stores({
@@ -111,57 +101,6 @@ db.version(1).stores({
   messages: "id, convId, [convId+seq], replyTo, status",
   attachments: "id, convId",
 })
-
-export function artifactHeadKey(convId: string, artifactId: string): string {
-  return `${convId}\u0000${artifactId}`
-}
-
-export function artifactHeadsFromMessages(messages: Message[]): ArtifactHead[] {
-  const heads = new Map<string, ArtifactHead>()
-  for (const message of messages) {
-    for (const snapshot of message.artifacts ?? []) {
-      const key = artifactHeadKey(message.convId, snapshot.artifactId)
-      const current = heads.get(key)
-      if (!current || message.seq >= current.seq) {
-        heads.set(key, {
-          key,
-          convId: message.convId,
-          artifactId: snapshot.artifactId,
-          messageId: message.id,
-          seq: message.seq,
-        })
-      }
-    }
-  }
-  return [...heads.values()]
-}
-
-db.version(2)
-  .stores({
-    conversations: "id, updatedAt",
-    messages: "id, convId, [convId+seq], replyTo, status, [convId+status]",
-    attachments: "id, convId",
-    artifactHeads: "key, convId, [convId+artifactId], messageId, seq",
-  })
-  .upgrade(async (tx) => {
-    const messages = await tx.table<Message>("messages").toArray()
-    const heads = artifactHeadsFromMessages(messages)
-    if (heads.length) await tx.table<ArtifactHead>("artifactHeads").bulkPut(heads)
-  })
-
-export async function rebuildArtifactHeads(convId: string, messages?: Message[]) {
-  const rows =
-    messages ??
-    (await db.messages
-      .where("[convId+seq]")
-      .between([convId, Dexie.minKey], [convId, Dexie.maxKey])
-      .toArray())
-  const heads = artifactHeadsFromMessages(rows)
-  await db.transaction("rw", db.artifactHeads, async () => {
-    await db.artifactHeads.where("convId").equals(convId).delete()
-    if (heads.length) await db.artifactHeads.bulkPut(heads)
-  })
-}
 
 export function autoTitle(text: string): string {
   const line = text.trim().split("\n")[0]
@@ -192,23 +131,15 @@ export async function deleteConversation(id: string) {
   // With sync on, keep a tombstone row so the delete propagates; the sync
   // loop purges it after telling the server.
   const { getPrefs } = await import("@/lib/profiles")
-  await db.transaction(
-    "rw",
-    db.conversations,
-    db.messages,
-    db.attachments,
-    db.artifactHeads,
-    async () => {
-      await db.messages.where("convId").equals(id).delete()
-      await db.attachments.where("convId").equals(id).delete()
-      await db.artifactHeads.where("convId").equals(id).delete()
-      if (getPrefs().syncEnabled) {
-        await db.conversations.update(id, { deletedAt: Date.now(), updatedAt: Date.now() })
-      } else {
-        await db.conversations.delete(id)
-      }
+  await db.transaction("rw", db.conversations, db.messages, db.attachments, async () => {
+    await db.messages.where("convId").equals(id).delete()
+    await db.attachments.where("convId").equals(id).delete()
+    if (getPrefs().syncEnabled) {
+      await db.conversations.update(id, { deletedAt: Date.now(), updatedAt: Date.now() })
+    } else {
+      await db.conversations.delete(id)
     }
-  )
+  })
 }
 
 /** Delete every conversation (tombstoning each when sync is on so it propagates). */
