@@ -41,8 +41,8 @@ export function ModelPicker({ profile }: { profile?: Profile }) {
   const prefs = usePrefs()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
-  const endpoint = useEndpointModels(profile, open)
-  const { data: meta } = useOpenRouterMeta(open)
+  const endpoint = useEndpointModels(profile)
+  const { data: meta } = useOpenRouterMeta()
   const isMobile = useMediaQuery("(max-width: 767px)")
   useBackClose(open, () => setOpen(false))
 
