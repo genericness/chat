@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { ArrowDown, ArrowUp, Check, Copy, Loader2, LogIn, Pause, Play, Users, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Loader2, LogIn, Pause, Play, UserPlus, Users, X } from "lucide-react"
 
 import { Markdown } from "@/components/markdown"
 import { ModelPicker } from "@/components/model-picker"
+import { RoomInviteDialog } from "@/components/room-invite-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useMe } from "@/hooks/use-me"
 import { activeProfile, usePrefs } from "@/lib/profiles"
-import { RoomClient, closeRoom, fetchRoomMeta, roomUrl } from "@/lib/room"
+import { RoomClient, closeRoom, fetchRoomMeta, type RoomMeta } from "@/lib/room"
 import { cn } from "@/lib/utils"
 
 export function RoomPage() {
   const { token } = useParams<{ token: string }>()
   const { data: me, isLoading: meLoading } = useMe()
-  const [meta, setMeta] = useState<{ title: string; joinMode: string } | null>(null)
+  const [meta, setMeta] = useState<RoomMeta | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [guestName, setGuestName] = useState("")
   const [joined, setJoined] = useState(false)
@@ -49,13 +50,15 @@ export function RoomPage() {
   }
 
   const signedIn = !!me
-  if (!signedIn && !joined) {
-    if (meta.joinMode === "members") {
+
+  // Invite-only rooms: require sign-in, then require an invite.
+  if (meta.joinMode === "members") {
+    if (!signedIn) {
       return (
         <Centered>
           <p className="text-lg font-medium">{meta.title}</p>
           <p className="text-sm text-muted-foreground">
-            This room requires signing in with GitHub.
+            This is an invite-only room. Sign in with GitHub to join.
           </p>
           <Button className="mt-2" onClick={() => (location.href = "/api/auth/login")}>
             <LogIn data-icon="inline-start" />
@@ -64,6 +67,25 @@ export function RoomPage() {
         </Centered>
       )
     }
+    if (!meta.member) {
+      return (
+        <Centered>
+          <p className="text-lg font-medium">{meta.title}</p>
+          <p className="text-sm text-muted-foreground">
+            You're not invited to this room. Ask the host to add your GitHub
+            username ({me.login}).
+          </p>
+          <a href="/" className="mt-2 text-sm text-primary hover:underline">
+            Go to chat
+          </a>
+        </Centered>
+      )
+    }
+    return <RoomLive token={token!} title={meta.title} isHost={meta.isHost} joinMode="members" />
+  }
+
+  // Link-open rooms: guests pick a display name.
+  if (!signedIn && !joined) {
     return (
       <Centered>
         <p className="text-lg font-medium">{meta.title}</p>
@@ -94,6 +116,8 @@ export function RoomPage() {
     <RoomLive
       token={token!}
       title={meta.title}
+      isHost={meta.isHost}
+      joinMode="guests"
       guestName={signedIn ? undefined : guestName.trim()}
     />
   )
@@ -110,10 +134,14 @@ function Centered({ children }: { children: React.ReactNode }) {
 function RoomLive({
   token,
   title,
+  isHost,
+  joinMode,
   guestName,
 }: {
   token: string
   title: string
+  isHost: boolean
+  joinMode: "guests" | "members"
   guestName?: string
 }) {
   const navigate = useNavigate()
@@ -126,7 +154,7 @@ function RoomLive({
   }, [client])
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot)
 
-  const isHost = state.me?.isHost ?? false
+  const [inviteOpen, setInviteOpen] = useState(false)
   const hostModel = prefs.selectedModels?.[0] || profile?.defaultModel
   // Host publishes its selected model to the room so everyone sees it.
   useEffect(() => {
@@ -134,7 +162,6 @@ function RoomLive({
   }, [client, isHost, state.status, hostModel])
 
   const [text, setText] = useState("")
-  const [copied, setCopied] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [atBottom, setAtBottom] = useState(true)
 
@@ -172,11 +199,6 @@ function RoomLive({
     setText("")
     setAtBottom(true) // your own message always pulls you to the bottom
   }
-  const copyInvite = () => {
-    void navigator.clipboard.writeText(roomUrl(token))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
   const endRoom = async () => {
     await closeRoom(token).catch(() => {})
     navigate("/")
@@ -212,8 +234,8 @@ function RoomLive({
           </div>
         </div>
         {isHost && <ModelPicker profile={profile} />}
-        <Button variant="outline" size="sm" className="shrink-0" onClick={copyInvite}>
-          {copied ? <Check className="text-primary" /> : <Copy />}
+        <Button variant="outline" size="sm" className="shrink-0" onClick={() => setInviteOpen(true)}>
+          <UserPlus />
           <span className="hidden sm:inline">Invite</span>
         </Button>
         {isHost && (
@@ -318,6 +340,14 @@ function RoomLive({
           </Button>
         </div>
       </div>
+
+      <RoomInviteDialog
+        token={token}
+        isHost={isHost}
+        joinMode={joinMode}
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+      />
     </div>
   )
 }

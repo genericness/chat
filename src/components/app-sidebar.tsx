@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useLiveQuery } from "dexie-react-hooks"
 import {
   ArrowDown,
@@ -27,7 +28,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ShareDialog } from "@/components/share-dialog"
-import { createRoom } from "@/lib/room"
+import { createRoom, listMyRooms } from "@/lib/room"
 import { db, deleteConversation, renameConversation } from "@/lib/db"
 import { exportChatJson, exportChatMarkdown } from "@/lib/transfer"
 import { cn } from "@/lib/utils"
@@ -48,7 +49,9 @@ export function AppSidebar({
   needsSetup,
 }: AppSidebarProps) {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const { id: activeId } = useParams<{ id: string }>()
+  const { data: myRooms } = useQuery({ queryKey: ["my-rooms"], queryFn: listMyRooms, staleTime: 30_000 })
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
   const [sharingId, setSharingId] = useState<string | null>(null)
@@ -128,6 +131,7 @@ export function AppSidebar({
             onClick={async () => {
               try {
                 const token = await createRoom("Group chat", "guests")
+                void qc.invalidateQueries({ queryKey: ["my-rooms"] })
                 onClose()
                 navigate(`/r/${token}`)
               } catch (e) {
@@ -138,6 +142,26 @@ export function AppSidebar({
             <Users />
             New group chat
           </Button>
+          {myRooms && myRooms.length > 0 && (
+            <div className="mt-1 flex max-h-44 flex-col gap-0.5 overflow-y-auto">
+              {myRooms.map((r) => (
+                <button
+                  key={r.token}
+                  onClick={() => {
+                    onClose()
+                    navigate(`/r/${r.token}`)
+                  }}
+                  className="flex items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm hover:bg-accent"
+                >
+                  <Users className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                  {r.isHost && (
+                    <span className="shrink-0 text-[0.65rem] text-muted-foreground">host</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-4 flex min-h-0 flex-1 flex-col">

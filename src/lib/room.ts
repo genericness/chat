@@ -252,11 +252,71 @@ export async function closeRoom(token: string): Promise<void> {
   await apiFetch(`/api/rooms/${token}`, { method: "DELETE", credentials: "same-origin" })
 }
 
-export async function fetchRoomMeta(token: string): Promise<{ title: string; joinMode: string }> {
+export interface RoomMeta {
+  title: string
+  joinMode: "guests" | "members"
+  isHost: boolean
+  /** Whether the signed-in caller is allowed to join as a member. */
+  member: boolean
+}
+
+export async function fetchRoomMeta(token: string): Promise<RoomMeta> {
   const { apiFetch } = await import("@/lib/api-base")
-  const res = await apiFetch(`/api/rooms/${token}`)
+  const res = await apiFetch(`/api/rooms/${token}`, { credentials: "same-origin" })
   if (!res.ok) throw new Error("Room not found or closed")
-  return (await res.json()) as { title: string; joinMode: string }
+  return (await res.json()) as RoomMeta
+}
+
+export interface MyRoom {
+  token: string
+  title: string
+  joinMode: "guests" | "members"
+  isHost: boolean
+}
+
+export async function listMyRooms(): Promise<MyRoom[]> {
+  const { apiFetch } = await import("@/lib/api-base")
+  const res = await apiFetch("/api/rooms", { credentials: "same-origin" })
+  if (!res.ok) return []
+  return ((await res.json()) as { rooms: MyRoom[] }).rooms
+}
+
+export async function getRoomMembers(token: string): Promise<{ members: string[]; joinMode: string }> {
+  const { apiFetch } = await import("@/lib/api-base")
+  const res = await apiFetch(`/api/rooms/${token}/members`, { credentials: "same-origin" })
+  if (!res.ok) throw new Error("Could not load members")
+  return (await res.json()) as { members: string[]; joinMode: string }
+}
+
+export async function addRoomMember(token: string, login: string): Promise<string> {
+  const { apiFetch } = await import("@/lib/api-base")
+  const res = await apiFetch(`/api/rooms/${token}/members`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ login }),
+  })
+  if (res.status === 400) throw new Error("That doesn't look like a GitHub username")
+  if (!res.ok) throw new Error("Could not add member")
+  return ((await res.json()) as { login: string }).login
+}
+
+export async function removeRoomMember(token: string, login: string): Promise<void> {
+  const { apiFetch } = await import("@/lib/api-base")
+  await apiFetch(`/api/rooms/${token}/members/${encodeURIComponent(login)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  })
+}
+
+export async function setRoomJoinMode(token: string, joinMode: "guests" | "members"): Promise<void> {
+  const { apiFetch } = await import("@/lib/api-base")
+  await apiFetch(`/api/rooms/${token}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ joinMode }),
+  })
 }
 
 export function roomUrl(token: string): string {
