@@ -14,6 +14,7 @@ import { testEndpoint, type EndpointTestResult } from "@/lib/endpoint-test"
 import { authorizeMcpServer, disconnectMcpServer } from "@/lib/mcp-oauth"
 
 import { ChatGPTSignIn } from "@/components/chatgpt-sign-in"
+import { UsageSection } from "@/components/usage-section"
 
 function GithubIcon() {
   return (
@@ -56,7 +57,7 @@ interface SettingsDialogProps {
 const EMPTY_DRAFT = { name: "", baseUrl: "", apiKey: "", defaultModel: "" }
 
 // Phone layout shows one section at a time; desktop stacks them all.
-const SECTIONS = ["Endpoints", "Tools", "Account", "General"] as const
+const SECTIONS = ["Endpoints", "Tools", "Usage", "Account", "General"] as const
 type Section = (typeof SECTIONS)[number]
 
 function AccountSection() {
@@ -464,6 +465,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           )}
             </>
           )}
+
+          {show("Usage") && <UsageSection />}
 
           {show("Account") && <AccountSection />}
 
