@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { ArrowUp, Check, Copy, Loader2, LogIn, Pause, Play, Users, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, Copy, Loader2, LogIn, Pause, Play, Users, X } from "lucide-react"
 
 import { Markdown } from "@/components/markdown"
 import { ModelPicker } from "@/components/model-picker"
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { useMe } from "@/hooks/use-me"
 import { activeProfile, usePrefs } from "@/lib/profiles"
 import { RoomClient, closeRoom, fetchRoomMeta, roomUrl } from "@/lib/room"
+import { cn } from "@/lib/utils"
 
 export function RoomPage() {
   const { token } = useParams<{ token: string }>()
@@ -135,9 +136,21 @@ function RoomLive({
   const [text, setText] = useState("")
   const [copied, setCopied] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [atBottom, setAtBottom] = useState(true)
+
+  const scrollToBottom = () => {
+    const el = scrollRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight })
+  }
+  const onScroll = () => {
+    const el = scrollRef.current
+    if (el) setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 120)
+  }
+  // Only stick to the bottom if the reader is already there — don't yank
+  // someone reading history while others talk over each other.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [state.messages, state.streaming])
+    if (atBottom) scrollToBottom()
+  }, [state.messages, state.streaming, atBottom])
 
   if (state.status === "closed") {
     return (
@@ -157,6 +170,7 @@ function RoomLive({
     if (!text.trim()) return
     client.post(text)
     setText("")
+    setAtBottom(true) // your own message always pulls you to the bottom
   }
   const copyInvite = () => {
     void navigator.clipboard.writeText(roomUrl(token))
@@ -169,99 +183,122 @@ function RoomLive({
   }
 
   return (
-    <div className="flex min-h-[100svh] flex-col">
-      <header className="flex items-center gap-2 border-b border-border px-4 py-2">
+    <div className="kb-pad flex h-[100dvh] flex-col overflow-hidden pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
+      <header className="flex shrink-0 items-center gap-1.5 border-b border-border px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:gap-2 sm:px-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h1 className="truncate text-sm font-semibold">{title}</h1>
             {state.paused && (
-              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-400">
-                agent paused
+              <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-400">
+                paused
               </span>
             )}
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Users className="size-3" />
-            {state.members.length} here
-            <span className="mx-1">·</span>
-            <span className={state.status === "open" ? "text-primary" : ""}>
+            <Users className="size-3 shrink-0" />
+            {state.members.length}
+            <span className="mx-0.5">·</span>
+            <span className={cn("truncate", state.status === "open" && "text-primary")}>
               {state.status === "open" ? "connected" : state.status}
             </span>
+            {!isHost && state.model && (
+              <>
+                <span className="mx-0.5">·</span>
+                <span className="truncate" title={state.model}>
+                  {state.model}
+                </span>
+              </>
+            )}
           </div>
         </div>
-        {isHost ? (
-          <ModelPicker profile={profile} />
-        ) : (
-          state.model && (
-            <span className="max-w-32 truncate text-xs text-muted-foreground" title={state.model}>
-              {state.model}
-            </span>
-          )
-        )}
-        <Button variant="outline" size="sm" onClick={copyInvite}>
-          {copied ? <Check data-icon="inline-start" className="text-primary" /> : <Copy data-icon="inline-start" />}
-          Invite
+        {isHost && <ModelPicker profile={profile} />}
+        <Button variant="outline" size="sm" className="shrink-0" onClick={copyInvite}>
+          {copied ? <Check className="text-primary" /> : <Copy />}
+          <span className="hidden sm:inline">Invite</span>
         </Button>
         {isHost && (
           <Button
             variant="ghost"
             size="icon-sm"
+            className="shrink-0"
             aria-label={state.paused ? "Resume agent" : "Pause agent"}
             onClick={() => client.setPaused(!state.paused)}
           >
             {state.paused ? <Play /> : <Pause />}
           </Button>
         )}
-        {isHost ? (
-          <Button variant="ghost" size="icon-sm" aria-label="Close room" className="text-destructive" onClick={endRoom}>
-            <X />
-          </Button>
-        ) : (
-          <Button variant="ghost" size="icon-sm" aria-label="Leave room" onClick={() => navigate("/")}>
-            <X />
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className={cn("shrink-0", isHost && "text-destructive")}
+          aria-label={isHost ? "Close room" : "Leave room"}
+          onClick={isHost ? endRoom : () => navigate("/")}
+        >
+          <X />
+        </Button>
       </header>
 
-      <div ref={scrollRef} className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 py-6">
-        {state.messages.length === 0 && !state.streaming && (
-          <p className="mt-10 text-center text-sm text-muted-foreground">
-            No messages yet. Say hi — everyone here talks to the same assistant.
-          </p>
-        )}
-        <div className="flex flex-col gap-5">
-          {state.messages.map((m) =>
-            m.kind === "user" ? (
-              <div key={m.mid} className="flex flex-col items-end gap-1">
-                <span className="px-1 text-xs text-muted-foreground">{m.authorName}</span>
-                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[0.95rem] whitespace-pre-wrap">
-                  {m.content}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          className="h-full overflow-y-auto overscroll-contain"
+        >
+          <div className="mx-auto w-full max-w-3xl px-4 py-6">
+            {state.messages.length === 0 && !state.streaming && (
+              <p className="mt-10 text-center text-sm text-muted-foreground">
+                No messages yet. Say hi — everyone here talks to the same assistant.
+              </p>
+            )}
+            <div className="flex flex-col gap-5">
+              {state.messages.map((m) =>
+                m.kind === "user" ? (
+                  <div key={m.mid} className="flex flex-col items-end gap-1">
+                    <span className="px-1 text-xs text-muted-foreground">{m.authorName}</span>
+                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[0.95rem] whitespace-pre-wrap">
+                      {m.content}
+                    </div>
+                  </div>
+                ) : (
+                  <div key={m.mid} className="flex flex-col gap-1">
+                    <span className="px-1 text-xs text-muted-foreground">{m.model || "Assistant"}</span>
+                    <Markdown text={m.content} />
+                  </div>
+                )
+              )}
+              {state.streaming && (
+                <div className="flex flex-col gap-1">
+                  <span className="px-1 text-xs text-muted-foreground">
+                    {state.streaming.model || "Assistant"}
+                  </span>
+                  {state.streaming.content ? (
+                    <Markdown text={state.streaming.content} streaming />
+                  ) : (
+                    <span className="inline-block h-4 w-2 animate-pulse rounded-xs bg-primary/70" />
+                  )}
                 </div>
-              </div>
-            ) : (
-              <div key={m.mid} className="flex flex-col gap-1">
-                <span className="px-1 text-xs text-muted-foreground">{m.model || "Assistant"}</span>
-                <Markdown text={m.content} />
-              </div>
-            )
-          )}
-          {state.streaming && (
-            <div className="flex flex-col gap-1">
-              <span className="px-1 text-xs text-muted-foreground">
-                {state.streaming.model || "Assistant"}
-              </span>
-              {state.streaming.content ? (
-                <Markdown text={state.streaming.content} streaming />
-              ) : (
-                <span className="inline-block h-4 w-2 animate-pulse rounded-xs bg-primary/70" />
               )}
             </div>
-          )}
+          </div>
         </div>
+        {!atBottom && (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full shadow-md"
+            onClick={() => {
+              scrollToBottom()
+              setAtBottom(true)
+            }}
+          >
+            <ArrowDown data-icon="inline-start" />
+            New messages
+          </Button>
+        )}
       </div>
 
-      <div className="mx-auto w-full max-w-3xl px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-end gap-2 rounded-2xl border border-border bg-card px-3 py-2">
+      <div className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+        <div className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-2xl border border-border bg-card px-3 py-2">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -273,7 +310,8 @@ function RoomLive({
             }}
             placeholder={state.status === "open" ? "Message the group" : "Connecting…"}
             disabled={state.status !== "open"}
-            className="max-h-40 min-h-8 flex-1 resize-none bg-transparent py-1 text-[0.95rem] outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60"
+            rows={1}
+            className="max-h-40 min-h-8 flex-1 resize-none bg-transparent py-1 text-base leading-6 outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60 sm:text-[0.95rem]"
           />
           <Button size="icon" className="shrink-0 rounded-full" aria-label="Send" disabled={!text.trim()} onClick={send}>
             <ArrowUp className="size-5" />
