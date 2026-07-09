@@ -153,9 +153,13 @@ sync.get("/attachments/:id", async (c) => {
   const id = c.req.param("id")
   const obj = await c.env.MEDIA.get(`${user.id}/${id}`)
   if (!obj) return c.json({ error: "not_found" }, 404)
+  // The content-type is user-supplied; attachment disposition + nosniff stop
+  // an uploaded text/html blob from rendering on this origin if navigated to.
   return new Response(obj.body, {
     headers: {
       "content-type": obj.httpMetadata?.contentType ?? "application/octet-stream",
+      "content-disposition": "attachment",
+      "x-content-type-options": "nosniff",
       "x-attachment-name": obj.customMetadata?.name ?? "attachment",
       "cache-control": "private, max-age=31536000",
     },
