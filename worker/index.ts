@@ -36,9 +36,6 @@ app.use("*", async (c, next) => {
   if (!headers.has("content-security-policy")) {
     headers.set("content-security-policy", CONTENT_SECURITY_POLICY)
   }
-  if (new URL(c.req.url).pathname.startsWith("/api/") && !headers.has("cache-control")) {
-    headers.set("cache-control", "private, no-store")
-  }
   headers.set("referrer-policy", "no-referrer")
   headers.set("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
   headers.set("x-content-type-options", "nosniff")
