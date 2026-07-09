@@ -195,7 +195,7 @@ chatgpt.post("/v1/chat/completions", async (c) => {
     )
   }
   return new Response(responsesToChatChunks(upstream.body, body.model), {
-    headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
+    headers: { "content-type": "text/event-stream", "cache-control": "private, no-store" },
   })
 })
 
