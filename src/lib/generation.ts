@@ -1,6 +1,7 @@
 import { toast } from "sonner"
 
 import {
+  artifactHeadsFromMessages,
   autoTitle,
   createConversation,
   db,
@@ -22,6 +23,12 @@ import {
   type ToolDef,
 } from "@/lib/openai"
 import { activeProfile, getPrefs, type Profile } from "@/lib/profiles"
+import {
+  beginStreamMessage,
+  settleStreamMessage,
+  updateStreamMessage,
+  type StreamMessageState,
+} from "@/lib/stream-state"
 import { gatherTools } from "@/lib/tools"
 
 // Module singleton: survives route changes; Dexie is the source of truth for UI.
@@ -77,9 +84,8 @@ export function stopGeneration(msgId: string) {
 
 export async function stopConversation(convId: string) {
   const streaming = await db.messages
-    .where("status")
-    .equals("streaming")
-    .filter((m) => m.convId === convId)
+    .where("[convId+status]")
+    .equals([convId, "streaming"])
     .toArray()
   for (const m of streaming) stopGeneration(m.id)
   // Stop means stop paying: tear down any E2B sandboxes too.
@@ -176,32 +182,41 @@ export async function startAssistant(
   }
   await db.messages.add(msg)
   await touchConversation(convId)
+  beginStreamMessage(msg)
 
   const context = await buildContext(convId, msg.seq)
   const controller = new AbortController()
   controllers.set(msg.id, controller)
 
-  // Throttled write-through: at most ~10 IDB writes/sec per stream.
+  // The external store renders deltas once per animation frame. Dexie remains
+  // the durable source of truth, but checkpointing less often avoids cloning
+  // the entire growing message on every visible update.
   let buf = ""
   let roundBuf = ""
   let reasonBuf = ""
   let timer: number | undefined
+  let checkpoint = Promise.resolve()
   // Executed/settled calls live in `journal`; calls whose arguments are still
   // streaming show up in `liveJournal` so the UI has progress before a round ends.
   const journal: NonNullable<Message["toolCalls"]> = []
   let liveJournal: NonNullable<Message["toolCalls"]> = []
-  const patch = () => ({
+  const patch = (): Partial<StreamMessageState> => ({
     content: buf,
     reasoning: reasonBuf || undefined,
     toolCalls: journal.length || liveJournal.length ? [...journal, ...liveJournal] : undefined,
   })
   const flush = () => {
     timer = undefined
-    streamTick()
-    void db.messages.update(msg.id, patch())
+    const durable = patch()
+    checkpoint = checkpoint
+      .catch(() => undefined)
+      .then(() => db.messages.update(msg.id, durable))
+      .then(() => undefined)
   }
   const schedule = () => {
-    if (timer === undefined) timer = window.setTimeout(flush, 100)
+    updateStreamMessage(msg.id, patch())
+    streamTick()
+    if (timer === undefined) timer = window.setTimeout(flush, 750)
   }
   const onDelta = (text: string) => {
     if (!roundBuf && buf) buf += "\n\n" // visual break between tool rounds
@@ -401,6 +416,7 @@ export async function startAssistant(
             status: "running",
           })
         }
+        updateStreamMessage(msg.id, patch())
         await db.messages.update(msg.id, { toolCalls: [...journal] })
         // Truncated/malformed argument JSON must never go back to the provider —
         // Anthropic and others 400 on it. Sanitize in the transcript, then report
@@ -440,6 +456,7 @@ export async function startAssistant(
             }
           }
           transcript.push({ role: "tool", tool_call_id: tc.id, content: output })
+          updateStreamMessage(msg.id, patch())
           await db.messages.update(msg.id, { toolCalls: [...journal] })
         }
         injectImages()
@@ -447,31 +464,40 @@ export async function startAssistant(
 
       window.clearTimeout(timer)
       endStreamHaptics(true)
-      await db.messages.update(msg.id, {
+      const finalPatch: Partial<Message> = {
         ...patch(),
         status: "done",
         stats: stats(),
         ...(gathered.sources.length && { searchResults: gathered.sources }),
-      })
+      }
+      settleStreamMessage(msg.id, finalPatch)
+      await checkpoint.catch(() => undefined)
+      await db.messages.update(msg.id, finalPatch)
     } catch (err) {
       window.clearTimeout(timer)
       endStreamHaptics(false)
       liveJournal = [] // drop never-executed streaming entries from the final state
       if (controller.signal.aborted) {
-        await db.messages.update(msg.id, {
+        const finalPatch: Partial<Message> = {
           ...patch(),
           status: "stopped",
           stats: stats(),
           pendingQuestion: undefined,
-        })
+        }
+        settleStreamMessage(msg.id, finalPatch)
+        await checkpoint.catch(() => undefined)
+        await db.messages.update(msg.id, finalPatch)
       } else {
         const message = err instanceof Error ? err.message : String(err)
-        await db.messages.update(msg.id, {
+        const finalPatch: Partial<Message> = {
           ...patch(),
           status: "error",
           error: message,
           pendingQuestion: undefined,
-        })
+        }
+        settleStreamMessage(msg.id, finalPatch)
+        await checkpoint.catch(() => undefined)
+        await db.messages.update(msg.id, finalPatch)
         toast.error(message)
       }
     } finally {
@@ -519,15 +545,26 @@ export async function editResend(userMsgId: string, newText: string) {
     .toArray()
   for (const m of after) stopGeneration(m.id)
 
-  await db.transaction("rw", db.messages, db.attachments, db.conversations, async () => {
-    const attachmentIds = after.flatMap((m) => m.attachmentIds ?? [])
-    if (attachmentIds.length) await db.attachments.bulkDelete(attachmentIds)
-    await db.messages.bulkDelete(after.map((m) => m.id))
-    await db.messages.update(userMsgId, { content: newText })
-    if (msg.seq === 0) {
-      await db.conversations.update(msg.convId, { title: autoTitle(newText) })
+  await db.transaction(
+    "rw",
+    db.messages,
+    db.attachments,
+    db.conversations,
+    db.artifactHeads,
+    async () => {
+      const attachmentIds = after.flatMap((m) => m.attachmentIds ?? [])
+      if (attachmentIds.length) await db.attachments.bulkDelete(attachmentIds)
+      await db.messages.bulkDelete(after.map((m) => m.id))
+      await db.messages.update(userMsgId, { content: newText })
+      if (msg.seq === 0) {
+        await db.conversations.update(msg.convId, { title: autoTitle(newText) })
+      }
+      const remaining = await db.messages.where("convId").equals(msg.convId).toArray()
+      const heads = artifactHeadsFromMessages(remaining)
+      await db.artifactHeads.where("convId").equals(msg.convId).delete()
+      if (heads.length) await db.artifactHeads.bulkPut(heads)
     }
-  })
+  )
 
   await startAssistant(msg.convId, userMsgId, { ...target, active: true })
 }

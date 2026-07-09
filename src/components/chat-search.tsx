@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useDeferredValue, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import { MessageSquare } from "lucide-react"
 import { useNavigate } from "react-router-dom"
@@ -27,10 +27,12 @@ interface ChatSearchProps {
 export function ChatSearch({ open, onOpenChange }: ChatSearchProps) {
   const navigate = useNavigate()
   const [query, setQuery] = useState("")
+  const deferredQuery = useDeferredValue(query)
 
   // ponytail: linear scan over local messages; add an index if libraries get huge.
   const hits = useLiveQuery(async () => {
-    const q = query.trim().toLowerCase()
+    if (!open) return [] as Hit[]
+    const q = deferredQuery.trim().toLowerCase()
     if (!q) {
       const recent = await db.conversations
         .orderBy("updatedAt")
@@ -51,16 +53,24 @@ export function ChatSearch({ open, onOpenChange }: ChatSearchProps) {
       .filter((m) => m.content.toLowerCase().includes(q))
       .limit(15)
       .toArray()
+    const missingIds = [
+      ...new Set(msgs.filter((m) => !byId.has(m.convId)).map((m) => m.convId)),
+    ]
+    const missingConvs = await db.conversations.bulkGet(missingIds)
+    const convById = new Map<string, NonNullable<(typeof missingConvs)[number]>>()
+    for (const conv of missingConvs) {
+      if (conv && !conv.deletedAt) convById.set(conv.id, conv)
+    }
     for (const m of msgs) {
       if (byId.has(m.convId)) continue
-      const conv = await db.conversations.get(m.convId)
-      if (!conv || conv.deletedAt) continue
+      const conv = convById.get(m.convId)
+      if (!conv) continue
       const at = m.content.toLowerCase().indexOf(q)
       const snippet = `${at > 20 ? "…" : ""}${m.content.slice(Math.max(0, at - 20), at + 60)}`
       byId.set(m.convId, { convId: m.convId, title: conv.title, snippet })
     }
     return [...byId.values()]
-  }, [query])
+  }, [open, deferredQuery])
 
   return (
     <CommandDialog

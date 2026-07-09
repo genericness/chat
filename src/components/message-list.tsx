@@ -1,40 +1,67 @@
 import { useEffect, useRef, useState } from "react"
+import Dexie from "dexie"
+import { useLiveQuery } from "dexie-react-hooks"
 import { ArrowDown } from "lucide-react"
 
 import { ReplyGroup } from "@/components/compare-group"
 import { MessageBubble } from "@/components/message"
 import { Button } from "@/components/ui/button"
-import type { Message } from "@/lib/db"
+import { db, type Message } from "@/lib/db"
 
 type Item = { key: string; msg: Message } | { key: string; group: Message[] }
 
-export function MessageList({ messages }: { messages: Message[] }) {
+export function MessageList({ convId }: { convId: string }) {
+  const messages =
+    useLiveQuery(
+      () =>
+        db.messages
+          .where("[convId+seq]")
+          .between([convId, Dexie.minKey], [convId, Dexie.maxKey])
+          .toArray(),
+      [convId]
+    ) ?? []
   const ref = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const frame = useRef<number | undefined>(undefined)
   const stick = useRef(true)
   const [atBottom, setAtBottom] = useState(true)
 
+  // Active streams update outside Dexie on animation frames. Observe the
+  // rendered content so only a stuck viewport follows those size changes.
   useEffect(() => {
-    if (stick.current) {
-      ref.current?.scrollTo({ top: ref.current.scrollHeight })
+    stick.current = true
+    setAtBottom(true)
+    const schedule = () => {
+      if (!stick.current || frame.current !== undefined) return
+      frame.current = window.requestAnimationFrame(() => {
+        frame.current = undefined
+        const el = ref.current
+        if (el) el.scrollTo({ top: el.scrollHeight })
+      })
     }
-  }, [messages])
-
-  // Keep the latest message in view when the viewport shrinks (soft keyboard,
-  // orientation change) while stuck to the bottom.
-  useEffect(() => {
-    const onResize = () => {
-      if (stick.current) ref.current?.scrollTo({ top: ref.current.scrollHeight })
+    const observer = new ResizeObserver(schedule)
+    if (contentRef.current) observer.observe(contentRef.current)
+    window.addEventListener("resize", schedule)
+    schedule()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", schedule)
+      if (frame.current !== undefined) window.cancelAnimationFrame(frame.current)
+      frame.current = undefined
     }
-    window.addEventListener("resize", onResize)
-    return () => window.removeEventListener("resize", onResize)
-  }, [])
+  }, [convId])
 
   // Group assistant replies by the user message they answer.
   const items: Item[] = []
   const groups = new Map<string, Message[]>()
   const userById = new Map<string, Message>()
+  let lastUserId: string | undefined
   for (const m of messages) {
-    if (m.role === "user") userById.set(m.id, m)
+    if (m.role === "user") {
+      userById.set(m.id, m)
+      lastUserId = m.id
+    }
     if (m.role === "assistant" && m.replyTo) {
       let g = groups.get(m.replyTo)
       if (!g) {
@@ -47,7 +74,6 @@ export function MessageList({ messages }: { messages: Message[] }) {
       items.push({ key: m.id, msg: m })
     }
   }
-  const lastUserId = [...messages].reverse().find((m) => m.role === "user")?.id
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -56,25 +82,29 @@ export function MessageList({ messages }: { messages: Message[] }) {
         className="flex-1 overflow-y-auto overscroll-contain"
         onScroll={() => {
           const el = ref.current
-          if (el) {
-            stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
-            setAtBottom(stick.current)
+          if (!el) return
+          const next = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+          if (next !== stick.current) {
+            stick.current = next
+            setAtBottom(next)
           }
         }}
       >
-        <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6">
-          {items.map((item) =>
-            "msg" in item ? (
-              <MessageBubble key={item.key} message={item.msg} />
-            ) : (
-              <ReplyGroup
-                key={item.key}
-                group={item.group}
-                canRegenerate={item.group[0]?.replyTo === lastUserId}
-                sources={userById.get(item.group[0]?.replyTo ?? "")?.searchResults}
-              />
-            )
-          )}
+        <div ref={contentRef} className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6">
+          {items.map((item) => (
+            <div key={item.key} className="message-row">
+              {"msg" in item ? (
+                <MessageBubble message={item.msg} />
+              ) : (
+                <ReplyGroup
+                  group={item.group}
+                  canRegenerate={item.group[0]?.replyTo === lastUserId}
+                  sources={userById.get(item.group[0]?.replyTo ?? "")?.searchResults}
+                />
+              )}
+            </div>
+          ))}
+          <div ref={bottomRef} aria-hidden />
         </div>
       </div>
       {!atBottom && (
@@ -86,7 +116,7 @@ export function MessageList({ messages }: { messages: Message[] }) {
           onClick={() => {
             stick.current = true
             setAtBottom(true)
-            ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: "smooth" })
+            bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
           }}
         >
           <ArrowDown className="size-4" />

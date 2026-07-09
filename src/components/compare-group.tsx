@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { promoteReply, type Message, type SearchResult } from "@/lib/db"
 import { stopGeneration } from "@/lib/generation"
+import { useStreamedMessage } from "@/lib/stream-state"
 import { cn } from "@/lib/utils"
 
 function CompareCard({
@@ -21,6 +22,7 @@ function CompareCard({
   message: Message
   sources?: SearchResult[]
 }) {
+  message = useStreamedMessage(message)
   const settled = message.status === "done" || message.status === "stopped"
   const citeSources = message.searchResults ?? sources
   return (

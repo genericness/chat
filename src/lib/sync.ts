@@ -1,5 +1,10 @@
 import { apiFetch } from "@/lib/api-base"
-import { db, type Conversation, type Message } from "@/lib/db"
+import {
+  artifactHeadsFromMessages,
+  db,
+  type Conversation,
+  type Message,
+} from "@/lib/db"
 import { getPrefs, setPrefs } from "@/lib/profiles"
 
 // Opt-in, conversation-granularity, last-write-wins by updatedAt.
@@ -7,21 +12,40 @@ import { getPrefs, setPrefs } from "@/lib/profiles"
 
 let timer: number | undefined
 let running = false
-let applying = false // suppress re-scheduling while we write pulled data
+let applying = 0 // suppress re-scheduling while concurrent pulls write local data
 
 export function scheduleSync(delayMs = 15_000) {
-  if (!getPrefs().syncEnabled || applying) return
+  if (!getPrefs().syncEnabled || applying > 0) return
   window.clearTimeout(timer)
   timer = window.setTimeout(() => void runSync(), delayMs)
 }
 
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
+const ATTACHMENT_CONCURRENCY = 3
+const CONVERSATION_CONCURRENCY = 3
+
+async function forEachConcurrent<T>(
+  values: readonly T[],
+  limit: number,
+  fn: (value: T) => Promise<void>
+) {
+  let next = 0
+  const workers = Array.from({ length: Math.min(limit, values.length) }, async () => {
+    for (;;) {
+      const index = next++
+      if (index >= values.length) return
+      await fn(values[index])
+    }
+  })
+  const results = await Promise.allSettled(workers)
+  const failed = results.find((result) => result.status === "rejected")
+  if (failed?.status === "rejected") throw failed.reason
+}
 
 async function pushAttachments(convId: string) {
   const atts = await db.attachments.where("convId").equals(convId).toArray()
-  for (const a of atts) {
-    if (a.syncedAt) continue
-    if (a.blob.size > MAX_ATTACHMENT_BYTES) continue // over the 8MB cap: stays local-only
+  const pending = atts.filter((a) => !a.syncedAt && a.blob.size <= MAX_ATTACHMENT_BYTES)
+  await forEachConcurrent(pending, ATTACHMENT_CONCURRENCY, async (a) => {
     const res = await apiFetch(`/api/sync/attachments/${a.id}`, {
       method: "PUT",
       credentials: "same-origin",
@@ -29,15 +53,16 @@ async function pushAttachments(convId: string) {
       body: a.blob,
     })
     if (res.ok) await db.attachments.update(a.id, { syncedAt: Date.now() })
-  }
+  })
 }
 
 async function pullAttachments(convId: string, messages: Message[]) {
-  const wanted = messages.flatMap((m) => m.attachmentIds ?? [])
-  for (const id of wanted) {
-    if (await db.attachments.get(id)) continue
+  const wanted = [...new Set(messages.flatMap((m) => m.attachmentIds ?? []))]
+  const existing = await db.attachments.bulkGet(wanted)
+  const missing = wanted.filter((_, i) => existing[i] === undefined)
+  await forEachConcurrent(missing, ATTACHMENT_CONCURRENCY, async (id) => {
     const res = await apiFetch(`/api/sync/attachments/${id}`, { credentials: "same-origin" })
-    if (!res.ok) continue // not uploaded (e.g. over cap on the other device)
+    if (!res.ok) return // not uploaded (e.g. over cap on the other device)
     await db.attachments.put({
       id,
       convId,
@@ -47,20 +72,24 @@ async function pullAttachments(convId: string, messages: Message[]) {
       createdAt: Date.now(),
       syncedAt: Date.now(),
     })
-  }
+  })
 }
 
 async function push(conv: Conversation) {
-  // D1 caps rows at ~2MB; drop oversized messages (giant artifacts/pastes)
-  // from sync rather than failing the whole conversation.
-  const messages = (await db.messages.where("convId").equals(conv.id).sortBy("seq")).filter(
-    (m) => JSON.stringify(m).length < 1_500_000
-  )
+  // D1 caps rows at ~2MB. Serialize each message once, then assemble the JSON
+  // envelope from those strings so giant artifacts are not traversed twice.
+  const rows = await db.messages.where("convId").equals(conv.id).sortBy("seq")
+  const messages: string[] = []
+  for (const message of rows) {
+    const json = JSON.stringify(message)
+    if (json.length < 1_500_000) messages.push(json)
+  }
+  const body = `{"conversation":${JSON.stringify(conv)},"messages":[${messages.join(",")}]}`
   const res = await apiFetch(`/api/sync/chats/${conv.id}`, {
     method: "PUT",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ conversation: conv, messages }),
+    body,
   })
   if (res.status === 409) {
     await pull(conv.id) // remote is newer — take it
@@ -76,23 +105,54 @@ async function pull(id: string) {
     conversation: Conversation
     messages: Message[]
   }
-  applying = true
+  applying++
   try {
-    await db.transaction("rw", db.conversations, db.messages, async () => {
-      // Never clobber a conversation that is generating right now.
-      const busy = await db.messages
-        .where("status")
-        .equals("streaming")
-        .filter((m) => m.convId === id)
-        .count()
-      if (busy > 0) return
-      await db.conversations.put(conversation)
-      await db.messages.where("convId").equals(id).delete()
-      await db.messages.bulkPut(messages)
-    })
-    await pullAttachments(id, messages)
+    let applied = false
+    await db.transaction(
+      "rw",
+      db.conversations,
+      db.messages,
+      db.artifactHeads,
+      async () => {
+        // Never clobber a conversation that is generating right now.
+        const busy = await db.messages
+          .where("[convId+status]")
+          .equals([id, "streaming"])
+          .count()
+        if (busy > 0) return
+        applied = true
+        await db.conversations.put(conversation)
+        await db.messages.where("convId").equals(id).delete()
+        if (messages.length) await db.messages.bulkPut(messages)
+        await db.artifactHeads.where("convId").equals(id).delete()
+        const heads = artifactHeadsFromMessages(messages)
+        if (heads.length) await db.artifactHeads.bulkPut(heads)
+      }
+    )
+    if (applied) await pullAttachments(id, messages)
   } finally {
-    applying = false
+    applying--
+  }
+}
+
+async function deleteRemoteConversation(id: string) {
+  applying++
+  try {
+    await db.transaction(
+      "rw",
+      db.conversations,
+      db.messages,
+      db.attachments,
+      db.artifactHeads,
+      async () => {
+        await db.messages.where("convId").equals(id).delete()
+        await db.attachments.where("convId").equals(id).delete()
+        await db.artifactHeads.where("convId").equals(id).delete()
+        await db.conversations.delete(id)
+      }
+    )
+  } finally {
+    applying--
   }
 }
 
@@ -113,42 +173,34 @@ export async function runSync(): Promise<void> {
     const local = await db.conversations.toArray()
     const localById = new Map(local.map((c) => [c.id, c]))
 
-    for (const conv of local) {
+    await forEachConcurrent(local, CONVERSATION_CONCURRENCY, async (conv) => {
       const r = remote.get(conv.id)
       if (conv.deletedAt) {
         let confirmed = true
         if (r && !r.deleted) {
-          const res = await apiFetch(`/api/sync/chats/${conv.id}`, {
+          const response = await apiFetch(`/api/sync/chats/${conv.id}`, {
             method: "DELETE",
             credentials: "same-origin",
           })
-          confirmed = res.ok // keep the tombstone to retry if the server didn't take it
+          confirmed = response.ok // keep the tombstone to retry if the server didn't take it
         }
-        if (confirmed) await db.conversations.delete(conv.id)
-        continue
+        if (confirmed) await deleteRemoteConversation(conv.id)
+        return
       }
+      if (r?.deleted) return // remote tombstone wins; the second phase removes local data
       if (!r || conv.updatedAt > r.updatedAt) await push(conv)
-    }
+    })
 
-    for (const [id, r] of remote) {
-      const l = localById.get(id)
+    await forEachConcurrent([...remote], CONVERSATION_CONCURRENCY, async ([id, r]) => {
+      const localConversation = localById.get(id)
       if (r.deleted) {
-        if (l && !l.deletedAt) {
-          applying = true
-          try {
-            await db.transaction("rw", db.conversations, db.messages, db.attachments, async () => {
-              await db.messages.where("convId").equals(id).delete()
-              await db.attachments.where("convId").equals(id).delete()
-              await db.conversations.delete(id)
-            })
-          } finally {
-            applying = false
-          }
+        if (localConversation && !localConversation.deletedAt) {
+          await deleteRemoteConversation(id)
         }
-        continue
+        return
       }
-      if (!l || r.updatedAt > l.updatedAt) await pull(id)
-    }
+      if (!localConversation || r.updatedAt > localConversation.updatedAt) await pull(id)
+    })
     setPrefs({ lastSyncAt: Date.now() })
   } finally {
     running = false
