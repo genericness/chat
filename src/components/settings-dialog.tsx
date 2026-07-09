@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
-import { Check, Loader2, LogIn, Pencil, Plug, Plus, Trash2, X } from "lucide-react"
+import { Check, Loader2, LogIn, Pencil, Plug, Plus, Trash2, Upload, X } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
 import { IS_NATIVE } from "@/lib/api-base"
 import { db, deleteAllConversations } from "@/lib/db"
+import { pickAndImportChat } from "@/lib/transfer"
 
 import { useLogout, useMe } from "@/hooks/use-me"
 import { CHATGPT_DEFAULT_MODEL, isChatGPTBaseUrl } from "@/lib/chatgpt"
@@ -504,10 +506,58 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </>
           )}
 
-          {show("General") && <DeleteAllChats />}
+          {show("General") && (
+            <>
+              <ImportChat onImported={() => onOpenChange(false)} />
+              <DeleteAllChats />
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ImportChat({ onImported }: { onImported: () => void }) {
+  const navigate = useNavigate()
+  const [busy, setBusy] = useState(false)
+  const run = async () => {
+    setBusy(true)
+    try {
+      const id = await pickAndImportChat()
+      if (id) {
+        toast.success("Chat imported")
+        onImported()
+        navigate(`/c/${id}`)
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Import failed")
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="grid gap-1.5">
+      <Label>Import chat</Label>
+      <Button
+        variant="outline"
+        size="sm"
+        className="justify-start"
+        disabled={busy}
+        onClick={run}
+      >
+        {busy ? (
+          <Loader2 data-icon="inline-start" className="animate-spin" />
+        ) : (
+          <Upload data-icon="inline-start" />
+        )}
+        Import from JSON
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        Restores a chat exported from here (per-chat menu → Export as JSON),
+        including attachments, as a new conversation.
+      </p>
+    </div>
   )
 }
 

@@ -2,6 +2,8 @@ import { useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import {
   ArrowDown,
+  Download,
+  FileDown,
   Loader2,
   MessageSquarePlus,
   MoreHorizontal,
@@ -10,6 +12,7 @@ import {
   Settings,
   Trash2,
 } from "lucide-react"
+import { toast } from "sonner"
 import { NavLink, useNavigate, useParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -22,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { db, deleteConversation, renameConversation } from "@/lib/db"
+import { exportChatJson, exportChatMarkdown } from "@/lib/transfer"
 import { cn } from "@/lib/utils"
 
 interface AppSidebarProps {
@@ -180,6 +184,24 @@ export function AppSidebar({
                           }}
                         >
                           <Pencil /> Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            void exportChatMarkdown(c.id).catch(() =>
+                              toast.error("Export failed")
+                            )
+                          }
+                        >
+                          <FileDown /> Export as Markdown
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            void exportChatJson(c.id).catch(() =>
+                              toast.error("Export failed")
+                            )
+                          }
+                        >
+                          <Download /> Export as JSON
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           variant="destructive"
