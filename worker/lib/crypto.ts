@@ -1,9 +1,16 @@
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
+let derived: { secret: string; key: Promise<CryptoKey> } | undefined
 
-async function deriveKey(secret: string): Promise<CryptoKey> {
-  const hash = await crypto.subtle.digest("SHA-256", encoder.encode(secret))
-  return crypto.subtle.importKey("raw", hash, { name: "AES-GCM" }, false, ["encrypt", "decrypt"])
+function deriveKey(secret: string): Promise<CryptoKey> {
+  if (derived?.secret === secret) return derived.key
+  const key = crypto.subtle
+    .digest("SHA-256", encoder.encode(secret))
+    .then((hash) =>
+      crypto.subtle.importKey("raw", hash, { name: "AES-GCM" }, false, ["encrypt", "decrypt"])
+    )
+  derived = { secret, key }
+  return key
 }
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -47,4 +54,16 @@ export async function decryptToken(secret: string, value: string): Promise<strin
 
 export function randomToken(bytes: number): string {
   return toBase64Url(crypto.getRandomValues(new Uint8Array(bytes)))
+}
+
+export async function sha256Base64Url(value: string): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", encoder.encode(value))
+  return toBase64Url(new Uint8Array(hash))
+}
+
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
 }

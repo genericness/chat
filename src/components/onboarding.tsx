@@ -29,7 +29,7 @@ export function Onboarding({ open, onClose }: { open: boolean; onClose: () => vo
   const [draft, setDraft] = useState({ name: "", baseUrl: "", apiKey: "", defaultModel: "" })
   const [test, setTest] = useState<{ state: "idle" | "testing" } | { state: "done"; result: EndpointTestResult }>({ state: "idle" })
   const [modelQuery, setModelQuery] = useState("")
-  const { data: meta } = useOpenRouterMeta()
+  const { data: meta } = useOpenRouterMeta(open)
 
   // extras drafts
   const [exaKey, setExaKey] = useState("")
@@ -134,8 +134,8 @@ export function Onboarding({ open, onClose }: { open: boolean; onClose: () => vo
               the web, connect MCP tools, and let models build small apps right in the chat.
             </p>
             <p className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-sm">
-              Your API keys and chats stay in this browser. Keys are never sent to this app's
-              server, never synced, never logged.
+              Your endpoint keys and chats stay in this browser unless you explicitly use a
+              disclosed proxy or turn on sync. Keys are never synced or logged.
             </p>
           </div>
         )}
@@ -297,8 +297,9 @@ export function Onboarding({ open, onClose }: { open: boolean; onClose: () => vo
                 placeholder="exa-…"
               />
               <p className="text-xs text-muted-foreground">
-                Enables the web-search toggle on the composer, with cited sources. Get a key at
-                exa.ai — stored in this browser only.
+                Enables the web-search toggle on the composer, with cited sources. Exa blocks
+                browser calls, so this key transits the app's proxy per request but is never
+                stored or logged server-side.
               </p>
             </div>
             <div className="grid gap-1.5">
