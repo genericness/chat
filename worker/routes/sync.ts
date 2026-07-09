@@ -20,6 +20,13 @@ interface SyncMessage {
 const sync = new Hono<AppEnv>()
 sync.use("*", requireAuth)
 
+// Storage backstops: any GitHub account can sync, so cap what one user can
+// cost us. Generous enough that no real chat history hits them.
+const MAX_CHAT_BYTES = 8 * 1024 * 1024
+const MAX_MESSAGES_PER_CHAT = 5000
+const MAX_CONVERSATIONS_PER_USER = 2000
+const MAX_ATTACHMENTS_PER_USER = 1000
+
 sync.get("/manifest", async (c) => {
   const user = c.get("user")
   const rows = await c.env.DB.prepare(
@@ -59,11 +66,16 @@ sync.get("/chats/:id", async (c) => {
 sync.put("/chats/:id", async (c) => {
   const user = c.get("user")
   const id = c.req.param("id")
-  const body = (await c.req.json()) as {
+  const raw = await c.req.text()
+  if (raw.length > MAX_CHAT_BYTES) return c.json({ error: "too_large" }, 413)
+  const body = JSON.parse(raw) as {
     conversation: SyncConversation
     messages: SyncMessage[]
   }
   if (body.conversation.id !== id) return c.json({ error: "id_mismatch" }, 400)
+  if (body.messages.length > MAX_MESSAGES_PER_CHAT) {
+    return c.json({ error: "too_many_messages" }, 413)
+  }
 
   const existing = await c.env.DB.prepare(
     "SELECT user_id, updated_at FROM conversations WHERE id = ?"
@@ -71,6 +83,16 @@ sync.put("/chats/:id", async (c) => {
     .bind(id)
     .first<{ user_id: number; updated_at: number }>()
   if (existing && existing.user_id !== user.id) return c.json({ error: "forbidden" }, 403)
+  if (!existing) {
+    const count = await c.env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM conversations WHERE user_id = ?"
+    )
+      .bind(user.id)
+      .first<{ n: number }>()
+    if ((count?.n ?? 0) >= MAX_CONVERSATIONS_PER_USER) {
+      return c.json({ error: "quota_exceeded" }, 403)
+    }
+  }
   if (existing && existing.updated_at > body.conversation.updatedAt) {
     return c.json({ error: "conflict" }, 409)
   }
@@ -140,6 +162,11 @@ sync.put("/attachments/:id", async (c) => {
   const body = await c.req.arrayBuffer()
   if (body.byteLength > MAX_ATTACHMENT_BYTES) {
     return c.json({ error: "too_large", maxBytes: MAX_ATTACHMENT_BYTES }, 413)
+  }
+  // ponytail: one list call per upload; swap for a D1 counter if uploads get hot.
+  const listing = await c.env.MEDIA.list({ prefix: `${user.id}/`, limit: 1000 })
+  if (listing.objects.length >= MAX_ATTACHMENTS_PER_USER) {
+    return c.json({ error: "quota_exceeded" }, 403)
   }
   await c.env.MEDIA.put(`${user.id}/${id}`, body, {
     httpMetadata: { contentType: c.req.header("content-type") ?? "application/octet-stream" },
