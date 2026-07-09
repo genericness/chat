@@ -6,6 +6,7 @@ import {
   Globe,
   Loader2,
   Plus,
+  Share2,
   SlidersHorizontal,
   Square,
   X,
@@ -14,6 +15,7 @@ import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
 import { ChatSettings } from "@/components/chat-settings"
+import { ShareDialog } from "@/components/share-dialog"
 import { ModelPicker } from "@/components/model-picker"
 import { Button } from "@/components/ui/button"
 import { useBackClose } from "@/hooks/use-back-close"
@@ -39,6 +41,7 @@ export function Composer({ convId, className }: ComposerProps) {
   const [text, setText] = useState("")
   const [pending, setPending] = useState<Pending[]>([])
   const [chatSettingsOpen, setChatSettingsOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const [webSearch, setWebSearch] = useState(false)
   const [sending, setSending] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -46,6 +49,7 @@ export function Composer({ convId, className }: ComposerProps) {
   const prefs = usePrefs()
   const profile = activeProfile(prefs)
   useBackClose(chatSettingsOpen, () => setChatSettingsOpen(false))
+  useBackClose(shareOpen, () => setShareOpen(false))
 
   const streaming = useLiveQuery(
     () =>
@@ -212,6 +216,17 @@ export function Composer({ convId, className }: ComposerProps) {
               variant="ghost"
               size="icon"
               className="shrink-0 rounded-full text-muted-foreground"
+              aria-label="Share chat"
+              onClick={() => setShareOpen(true)}
+            >
+              <Share2 className="size-4" />
+            </Button>
+          )}
+          {convId && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0 rounded-full text-muted-foreground"
               aria-label="Chat settings"
               onClick={() => setChatSettingsOpen(true)}
             >
@@ -257,6 +272,9 @@ export function Composer({ convId, className }: ComposerProps) {
           open={chatSettingsOpen}
           onOpenChange={setChatSettingsOpen}
         />
+      )}
+      {convId && (
+        <ShareDialog convId={convId} open={shareOpen} onOpenChange={setShareOpen} />
       )}
     </div>
   )
