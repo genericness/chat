@@ -3,9 +3,11 @@ import { useNavigate, useParams } from "react-router-dom"
 import { ArrowUp, Check, Copy, Loader2, LogIn, Pause, Play, Users, X } from "lucide-react"
 
 import { Markdown } from "@/components/markdown"
+import { ModelPicker } from "@/components/model-picker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useMe } from "@/hooks/use-me"
+import { activeProfile, usePrefs } from "@/lib/profiles"
 import { RoomClient, closeRoom, fetchRoomMeta, roomUrl } from "@/lib/room"
 
 export function RoomPage() {
@@ -114,6 +116,8 @@ function RoomLive({
   guestName?: string
 }) {
   const navigate = useNavigate()
+  const prefs = usePrefs()
+  const profile = activeProfile(prefs)
   const [client] = useState(() => new RoomClient(token, guestName))
   useEffect(() => {
     client.connect()
@@ -121,14 +125,19 @@ function RoomLive({
   }, [client])
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot)
 
+  const isHost = state.me?.isHost ?? false
+  const hostModel = prefs.selectedModels?.[0] || profile?.defaultModel
+  // Host publishes its selected model to the room so everyone sees it.
+  useEffect(() => {
+    if (isHost && state.status === "open" && hostModel) client.setModel(hostModel)
+  }, [client, isHost, state.status, hostModel])
+
   const [text, setText] = useState("")
   const [copied, setCopied] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [state.messages, state.streaming])
-
-  const isHost = state.me?.isHost ?? false
 
   if (state.status === "closed") {
     return (
@@ -180,6 +189,15 @@ function RoomLive({
             </span>
           </div>
         </div>
+        {isHost ? (
+          <ModelPicker profile={profile} />
+        ) : (
+          state.model && (
+            <span className="max-w-32 truncate text-xs text-muted-foreground" title={state.model}>
+              {state.model}
+            </span>
+          )
+        )}
         <Button variant="outline" size="sm" onClick={copyInvite}>
           {copied ? <Check data-icon="inline-start" className="text-primary" /> : <Copy data-icon="inline-start" />}
           Invite
@@ -222,14 +240,16 @@ function RoomLive({
               </div>
             ) : (
               <div key={m.mid} className="flex flex-col gap-1">
-                <span className="px-1 text-xs text-muted-foreground">Assistant</span>
+                <span className="px-1 text-xs text-muted-foreground">{m.model || "Assistant"}</span>
                 <Markdown text={m.content} />
               </div>
             )
           )}
           {state.streaming && (
             <div className="flex flex-col gap-1">
-              <span className="px-1 text-xs text-muted-foreground">Assistant</span>
+              <span className="px-1 text-xs text-muted-foreground">
+                {state.streaming.model || "Assistant"}
+              </span>
               {state.streaming.content ? (
                 <Markdown text={state.streaming.content} streaming />
               ) : (

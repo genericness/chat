@@ -24,6 +24,7 @@ interface StoredMessage {
   author_name: string
   content: string
   created_at: number
+  model: string | null
   // sql.exec<T>() requires T to be an index-signature record.
   [key: string]: SqlStorageValue
 }
@@ -36,9 +37,12 @@ const MODEL_CONTEXT_MESSAGES = 40
 export class Room extends DurableObject<Bindings> {
   private generating = false
   private currentRunId: string | null = null
+  private currentRunModel: string | null = null
   // In-memory: a paused room stays active (people keep chatting) so it won't
   // hibernate; if it ever evicts while empty, unpausing is moot.
   private pausedFlag = false
+  // The model the host has selected for this room, for display to everyone.
+  private roomModel: string | null = null
 
   constructor(ctx: DurableObjectState, env: Bindings) {
     super(ctx, env)
@@ -51,9 +55,16 @@ export class Room extends DurableObject<Bindings> {
           author_id TEXT NOT NULL,
           author_name TEXT NOT NULL,
           content TEXT NOT NULL,
-          created_at INTEGER NOT NULL
+          created_at INTEGER NOT NULL,
+          model TEXT
         )
       `)
+      // Older rooms predate the model column; add it if missing.
+      try {
+        ctx.storage.sql.exec("ALTER TABLE messages ADD COLUMN model TEXT")
+      } catch {
+        /* column already exists */
+      }
     })
   }
 
@@ -81,7 +92,12 @@ export class Room extends DurableObject<Bindings> {
     identity.isRunner = identity.isHost && !this.runnerSocket()
     server.serializeAttachment(identity)
 
-    this.sendTo(server, { type: "welcome", you: { id: identity.id, isHost: identity.isHost }, paused: this.isPaused() })
+    this.sendTo(server, {
+      type: "welcome",
+      you: { id: identity.id, isHost: identity.isHost },
+      paused: this.isPaused(),
+      model: this.roomModel,
+    })
     this.sendTo(server, { type: "history", messages: this.history() })
     this.broadcastPresence()
     if (identity.isRunner) this.maybeRun()
@@ -102,6 +118,14 @@ export class Room extends DurableObject<Bindings> {
     switch (msg.type) {
       case "post":
         return this.onPost(ws, att, String(msg.content ?? ""))
+      case "assistant_start":
+        // The runner reports the model it's about to use, so every reply is
+        // labelled with what actually produced it.
+        if (att.isRunner && msg.runId === this.currentRunId) {
+          this.currentRunModel = msg.model ? String(msg.model) : null
+          this.broadcast({ type: "assistant_start", runId: msg.runId, model: this.currentRunModel })
+        }
+        return
       case "assistant_delta":
         if (att.isRunner && msg.runId === this.currentRunId) {
           this.broadcast({ type: "assistant_delta", runId: msg.runId, chunk: String(msg.chunk ?? "") })
@@ -114,8 +138,16 @@ export class Room extends DurableObject<Bindings> {
         if (att.isRunner && msg.runId === this.currentRunId) {
           this.generating = false
           this.currentRunId = null
+          this.currentRunModel = null
           this.broadcast({ type: "assistant_error", message: String(msg.message ?? "Generation failed") })
           this.maybeRun()
+        }
+        return
+      case "set_model":
+        // Only the host (the runner's owner) chooses the room's model.
+        if (att.isHost && msg.model) {
+          this.roomModel = String(msg.model)
+          this.broadcast({ type: "model", model: this.roomModel })
         }
         return
       case "pause":
@@ -190,8 +222,8 @@ export class Room extends DurableObject<Bindings> {
     if (content) {
       const mid = crypto.randomUUID()
       this.ctx.storage.sql.exec(
-        "INSERT INTO messages (mid, kind, author_id, author_name, content, created_at) VALUES (?, 'assistant', 'assistant', 'Assistant', ?, ?)",
-        mid, content, Date.now()
+        "INSERT INTO messages (mid, kind, author_id, author_name, content, created_at, model) VALUES (?, 'assistant', 'assistant', 'Assistant', ?, ?, ?)",
+        mid, content, Date.now(), this.currentRunModel
       )
       const row = this.ctx.storage.sql
         .exec<StoredMessage>("SELECT * FROM messages WHERE mid = ?", mid)
@@ -200,6 +232,7 @@ export class Room extends DurableObject<Bindings> {
     } else {
       this.broadcast({ type: "assistant_done", runId, message: null })
     }
+    this.currentRunModel = null
     this.maybeRun()
   }
 
@@ -231,8 +264,9 @@ export class Room extends DurableObject<Bindings> {
 
     this.generating = true
     this.currentRunId = crypto.randomUUID()
+    // The runner replies with assistant_start (carrying the model it used),
+    // then deltas, then assistant_done — we don't broadcast the start here.
     this.sendTo(runner, { type: "run", runId: this.currentRunId, messages })
-    this.broadcast({ type: "assistant_start", runId: this.currentRunId })
   }
 
   private runnerSocket(): WebSocket | undefined {

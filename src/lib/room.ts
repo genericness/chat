@@ -17,6 +17,8 @@ export interface RoomMessage {
   authorName: string
   content: string
   createdAt: number
+  /** For assistant messages: the model that produced it. */
+  model?: string | null
 }
 
 export interface RoomMember {
@@ -29,9 +31,11 @@ export interface RoomMember {
 export interface RoomState {
   status: "connecting" | "open" | "closed" | "error"
   messages: RoomMessage[]
-  streaming: { runId: string; content: string } | null
+  streaming: { runId: string; content: string; model?: string | null } | null
   members: RoomMember[]
   paused: boolean
+  /** The model the host has selected for this room. */
+  model: string | null
   me: { id: string; isHost: boolean } | null
   error?: string
 }
@@ -44,6 +48,7 @@ interface WireMessage {
   author_name: string
   content: string
   created_at: number
+  model: string | null
 }
 
 const norm = (m: WireMessage): RoomMessage => ({
@@ -54,6 +59,7 @@ const norm = (m: WireMessage): RoomMessage => ({
   authorName: m.author_name,
   content: m.content,
   createdAt: m.created_at,
+  model: m.model,
 })
 
 export class RoomClient {
@@ -66,6 +72,7 @@ export class RoomClient {
     streaming: null,
     members: [],
     paused: false,
+    model: null,
     me: null,
   }
 
@@ -82,6 +89,9 @@ export class RoomClient {
   }
   setPaused(paused: boolean) {
     this.send({ type: "pause", paused })
+  }
+  setModel(model: string) {
+    if (model) this.send({ type: "set_model", model })
   }
   close() {
     this.runAbort?.abort()
@@ -124,7 +134,14 @@ export class RoomClient {
     }
     switch (msg.type) {
       case "welcome":
-        this.set({ me: msg.you as RoomState["me"], paused: Boolean(msg.paused) })
+        this.set({
+          me: msg.you as RoomState["me"],
+          paused: Boolean(msg.paused),
+          model: (msg.model as string | null) ?? null,
+        })
+        return
+      case "model":
+        this.set({ model: (msg.model as string | null) ?? null })
         return
       case "history":
         this.set({ messages: (msg.messages as WireMessage[]).map(norm) })
@@ -139,12 +156,12 @@ export class RoomClient {
         this.set({ paused: Boolean(msg.paused) })
         return
       case "assistant_start":
-        this.set({ streaming: { runId: String(msg.runId), content: "" } })
+        this.set({ streaming: { runId: String(msg.runId), content: "", model: (msg.model as string | null) ?? null } })
         return
       case "assistant_delta": {
         const s = this.state.streaming
         if (s && s.runId === msg.runId) {
-          this.set({ streaming: { runId: s.runId, content: s.content + String(msg.chunk) } })
+          this.set({ streaming: { ...s, content: s.content + String(msg.chunk) } })
         }
         return
       }
@@ -174,6 +191,8 @@ export class RoomClient {
       this.send({ type: "assistant_error", runId, message: "Host has no model selected." })
       return
     }
+    // Report the model up front so every reply is labelled with what made it.
+    this.send({ type: "assistant_start", runId, model })
     this.runAbort = new AbortController()
     let full = ""
     let buf = ""
