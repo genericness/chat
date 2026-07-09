@@ -26,10 +26,12 @@ export async function setSession(c: Context<AppEnv>, userId: number): Promise<vo
 }
 
 export async function getSessionUserId(c: Context<AppEnv>): Promise<number | null> {
-  // Native apps send the same encrypted payload as a bearer token instead of a cookie.
+  // Native apps send the same encrypted payload as a bearer token instead of a
+  // cookie. WebSockets can't set an Authorization header, so native passes it as
+  // a ?token= query param on the upgrade instead (web still uses the cookie).
   const header = c.req.header("authorization")
   const bearer = header?.startsWith("Bearer ") ? header.slice(7) : undefined
-  const value = getCookie(c, SESSION_COOKIE) ?? bearer
+  const value = getCookie(c, SESSION_COOKIE) ?? bearer ?? c.req.query("token")
   if (!value) return null
   const plain = await decryptToken(c.env.COOKIE_SECRET, value)
   if (!plain) return null

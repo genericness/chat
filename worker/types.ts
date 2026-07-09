@@ -1,9 +1,11 @@
 import type { UserRow } from "./lib/db"
+import type { Room } from "./room"
 
 export interface Bindings {
   ASSETS: Fetcher
   DB: D1Database
   MEDIA: R2Bucket
+  ROOM: DurableObjectNamespace<Room>
   GITHUB_CLIENT_ID: string
   GITHUB_CLIENT_SECRET: string
   COOKIE_SECRET: string

@@ -6,7 +6,9 @@ Guidance for working in this repo. Keep it high-signal — it's loaded every ses
 
 **chat** — a bring-your-own-key web client for any OpenAI-compatible `/v1/chat/completions` API. Local-first (IndexedDB), optional GitHub-OAuth chat sync. Deployed to a single Cloudflare Worker at **chat.4x.rip**. Live, public-facing.
 
-Core promise, do not break it: **API keys and chats never leave the browser.** Keys live in `localStorage` only — never synced, never logged, never sent to our server. Model calls go browser→provider directly. The Worker exists only for GitHub OAuth, opt-in sync (D1 + R2), and a few proxies for services that block browser CORS.
+Core promise, do not break it: **API keys never leave the browser.** Keys live in `localStorage` only — never synced, never logged, never sent to our server. Model calls go browser→provider directly. The Worker exists only for GitHub OAuth, opt-in sync (D1 + R2), a few proxies for services that block browser CORS, and opt-in sharing/group-chat.
+
+Two explicit, opt-in exceptions where chat *content* (never keys) is server-side: **public share links** (`/s/:token`, a static snapshot) and **group chats** (`/r/:token`, live). Even in group chat the model call runs in the host's *browser* with the host's key — the worker/DO only relays the generated text, so keys still never leave the browser. Both are gated behind explicit UI.
 
 ## Stack & commands
 
@@ -35,7 +37,8 @@ Core promise, do not break it: **API keys and chats never leave the browser.** K
 - `src/lib/e2b.ts` / `e2b-tools.ts` — sandboxes: code execution, `build_artifact` (esbuild in-sandbox), desktop computer use.
 - `src/lib/mcp.ts` / `mcp-oauth.ts` — MCP Streamable-HTTP client + full browser OAuth (discovery, DCR, PKCE popup, refresh).
 - `src/lib/exa.ts` — `exaSearch` + `exaContents`; `src/lib/profiles.ts` — localStorage prefs + `PRESETS` + `usePrefs`; `src/lib/sync.ts` — opt-in sync loop; `src/lib/panel.ts` — side-panel store.
-- `worker/routes/` — `auth` (encrypted-cookie GitHub OAuth), `sync` (D1+R2, LWW, tombstones), `openrouter` (edge-cached slim model metadata), `exa` + `opencode` (CORS proxies).
+- `worker/routes/` — `auth` (encrypted-cookie GitHub OAuth), `sync` (D1+R2, LWW, tombstones), `openrouter` (edge-cached slim model metadata), `exa` + `opencode` (CORS proxies), `share` (public read-only snapshots), `rooms` (group-chat registry + WebSocket→DO routing).
+- **Group chat** — `worker/room.ts` is a `Room` Durable Object (one per room, SQLite-backed, WebSocket hibernation). It's a message relay only: the host's browser is the "runner" that calls the model with its own key and streams the reply back through the DO, which fans it out. Client: `src/lib/room.ts` (WS store + runner) drives `src/routes/room.tsx` (`/r/:token`). Rooms are server-authoritative (not Dexie). D1 `rooms` table is just the registry. Members join by cookie; guests by `?name=` when the room allows it. v1 is text-only (no tools/artifacts/attachments in group mode).
 
 ## Non-obvious constraints (read before touching these areas)
 

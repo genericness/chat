@@ -12,6 +12,7 @@ import {
   Settings,
   Share2,
   Trash2,
+  Users,
 } from "lucide-react"
 import { toast } from "sonner"
 import { NavLink, useNavigate, useParams } from "react-router-dom"
@@ -26,6 +27,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ShareDialog } from "@/components/share-dialog"
+import { createRoom } from "@/lib/room"
 import { db, deleteConversation, renameConversation } from "@/lib/db"
 import { exportChatJson, exportChatMarkdown } from "@/lib/transfer"
 import { cn } from "@/lib/utils"
@@ -119,6 +121,22 @@ export function AppSidebar({
             <Search />
             Search chats
             <kbd className="ml-auto text-xs text-muted-foreground/70 pointer-coarse:hidden">⌘K</kbd>
+          </Button>
+          <Button
+            variant="ghost"
+            className="justify-start gap-2 rounded-full"
+            onClick={async () => {
+              try {
+                const token = await createRoom("Group chat", "guests")
+                onClose()
+                navigate(`/r/${token}`)
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Could not start room")
+              }
+            }}
+          >
+            <Users />
+            New group chat
           </Button>
         </div>
 
