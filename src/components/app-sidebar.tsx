@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { NavLink, useNavigate, useParams } from "react-router-dom"
 
+import { preloadMarkdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -29,6 +30,8 @@ interface AppSidebarProps {
   onClose: () => void
   onOpenSettings: () => void
   onOpenSearch: () => void
+  onPreloadSettings: () => void
+  onPreloadSearch: () => void
   needsSetup?: boolean
 }
 
@@ -37,6 +40,8 @@ export function AppSidebar({
   onClose,
   onOpenSettings,
   onOpenSearch,
+  onPreloadSettings,
+  onPreloadSearch,
   needsSetup,
 }: AppSidebarProps) {
   const navigate = useNavigate()
@@ -49,6 +54,7 @@ export function AppSidebar({
       .orderBy("updatedAt")
       .reverse()
       .filter((c) => !c.deletedAt)
+      .limit(100)
       .toArray()
   )
   const streamingConvIds = useLiveQuery(async () => {
@@ -108,6 +114,9 @@ export function AppSidebar({
               onOpenSearch()
               onClose()
             }}
+            onPointerEnter={onPreloadSearch}
+            onFocus={onPreloadSearch}
+            onTouchStart={onPreloadSearch}
           >
             <Search />
             Search chats
@@ -151,6 +160,9 @@ export function AppSidebar({
                     <NavLink
                       to={`/c/${c.id}`}
                       onClick={onClose}
+                      onPointerEnter={preloadMarkdown}
+                      onFocus={preloadMarkdown}
+                      onTouchStart={preloadMarkdown}
                       className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-sm"
                       title={c.title}
                     >
@@ -214,6 +226,9 @@ export function AppSidebar({
               needsSetup && "ring-2 ring-primary/60"
             )}
             onClick={onOpenSettings}
+            onPointerEnter={onPreloadSettings}
+            onFocus={onPreloadSettings}
+            onTouchStart={onPreloadSettings}
           >
             <Settings />
             {needsSetup ? "Get started" : "Settings"}

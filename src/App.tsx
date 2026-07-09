@@ -1,22 +1,36 @@
-import { useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
 import { Menu } from "lucide-react"
 import { Outlet, useNavigate } from "react-router-dom"
 
 import { AppSidebar } from "@/components/app-sidebar"
-import { ChatSearch } from "@/components/chat-search"
-import { Onboarding } from "@/components/onboarding"
-import { SettingsDialog } from "@/components/settings-dialog"
 import { Button } from "@/components/ui/button"
 import { useBackClose } from "@/hooks/use-back-close"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { usePrefs } from "@/lib/profiles"
 import { cn } from "@/lib/utils"
 
+const loadChatSearch = () => import("@/components/chat-search")
+const loadOnboarding = () => import("@/components/onboarding")
+const loadSettingsDialog = () => import("@/components/settings-dialog")
+
+const ChatSearch = lazy(() =>
+  loadChatSearch().then((module) => ({ default: module.ChatSearch }))
+)
+const Onboarding = lazy(() =>
+  loadOnboarding().then((module) => ({ default: module.Onboarding }))
+)
+const SettingsDialog = lazy(() =>
+  loadSettingsDialog().then((module) => ({ default: module.SettingsDialog }))
+)
+
 export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [settingsMounted, setSettingsMounted] = useState(false)
+  const [searchMounted, setSearchMounted] = useState(false)
+  const [wizardMounted, setWizardMounted] = useState(false)
   const prefs = usePrefs()
   const navigate = useNavigate()
 
@@ -24,8 +38,25 @@ export function App() {
   // straight to Settings, which auto-opens the endpoint editor when empty.
   const isMobile = useMediaQuery("(max-width: 767px)")
   const needsSetup = !prefs.onboardedAt && prefs.profiles.length === 0
-  const openSettings = () =>
-    needsSetup && !isMobile ? setWizardOpen(true) : setSettingsOpen(true)
+  const preloadSettingsSurface = () => {
+    if (needsSetup && !isMobile) void loadOnboarding()
+    else void loadSettingsDialog()
+  }
+  const openSettings = () => {
+    preloadSettingsSurface()
+    if (needsSetup && !isMobile) {
+      setWizardMounted(true)
+      setWizardOpen(true)
+    } else {
+      setSettingsMounted(true)
+      setSettingsOpen(true)
+    }
+  }
+  const openSearch = () => {
+    void loadChatSearch()
+    setSearchMounted(true)
+    setSearchOpen(true)
+  }
 
   useBackClose(sidebarOpen, () => setSidebarOpen(false))
   useBackClose(settingsOpen, () => setSettingsOpen(false))
@@ -37,7 +68,9 @@ export function App() {
       const mod = e.metaKey || e.ctrlKey
       if (mod && e.key === "k") {
         e.preventDefault()
-        setSearchOpen((v) => !v)
+        void loadChatSearch()
+        setSearchMounted(true)
+        setSearchOpen((open) => !open)
       }
       if (mod && e.shiftKey && e.key.toLowerCase() === "o") {
         e.preventDefault()
@@ -90,7 +123,9 @@ export function App() {
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onOpenSettings={openSettings}
-        onOpenSearch={() => setSearchOpen(true)}
+        onOpenSearch={openSearch}
+        onPreloadSettings={preloadSettingsSurface}
+        onPreloadSearch={() => void loadChatSearch()}
         needsSetup={needsSetup}
       />
       <main className="relative flex min-w-0 flex-1 flex-col">
@@ -112,9 +147,21 @@ export function App() {
         </div>
         <Outlet />
       </main>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-      <ChatSearch open={searchOpen} onOpenChange={setSearchOpen} />
-      <Onboarding open={wizardOpen} onClose={() => setWizardOpen(false)} />
+      {settingsMounted && (
+        <Suspense fallback={null}>
+          <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        </Suspense>
+      )}
+      {searchMounted && (
+        <Suspense fallback={null}>
+          <ChatSearch open={searchOpen} onOpenChange={setSearchOpen} />
+        </Suspense>
+      )}
+      {wizardMounted && (
+        <Suspense fallback={null}>
+          <Onboarding open={wizardOpen} onClose={() => setWizardOpen(false)} />
+        </Suspense>
+      )}
     </div>
   )
 }

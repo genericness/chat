@@ -108,7 +108,13 @@ function AccountSection() {
             variant="outline"
             className="justify-center gap-2"
             {...(IS_NATIVE
-              ? { onClick: () => void import("@/lib/native").then((m) => m.nativeLogin()) }
+              ? {
+                  onClick: () => {
+                    if (import.meta.env.VITE_API_BASE) {
+                      void import("@/lib/native").then((module) => module.nativeLogin())
+                    }
+                  },
+                }
               : { render: <a href="/api/auth/login" />, nativeButton: false })}
           >
             <GithubIcon />

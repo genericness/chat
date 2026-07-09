@@ -5,15 +5,24 @@ import tailwindcss from "@tailwindcss/vite"
 import { cloudflare } from "@cloudflare/vite-plugin"
 
 const cryptoShim = fileURLToPath(new URL("./src/lib/crypto-shim.ts", import.meta.url))
+const nativeStub = fileURLToPath(new URL("./src/lib/native-stub.ts", import.meta.url))
+const isNativeBuild = Boolean(process.env.VITE_API_BASE)
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), cloudflare()],
   resolve: {
-    alias: {
-      "@": "/src",
+    alias: [
+      ...(!isNativeBuild
+        ? [
+            { find: "@/lib/native", replacement: nativeStub },
+            { find: "@capacitor/browser", replacement: nativeStub },
+            { find: "@capacitor/haptics", replacement: nativeStub },
+          ]
+        : []),
+      { find: "@", replacement: "/src" },
       // E2B SDKs import Node's crypto.randomBytes; shim it for the browser.
-      crypto: cryptoShim,
-    },
+      { find: "crypto", replacement: cryptoShim },
+    ],
   },
   // Keep the E2B SDKs out of esbuild dep pre-bundling so the crypto alias
   // applies through vite's resolver (esbuild resolves aliases differently).

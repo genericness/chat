@@ -47,10 +47,10 @@ export function lookupMeta(
 }
 
 /** Model ids offered by the user's own endpoint (`GET {baseUrl}/models`). */
-export function useEndpointModels(profile?: Profile) {
+export function useEndpointModels(profile?: Profile, enabled = true) {
   return useQuery({
     queryKey: ["endpoint-models", profile?.id, profile?.baseUrl],
-    enabled: !!profile,
+    enabled: enabled && !!profile,
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: async () => {
@@ -72,9 +72,10 @@ export function useEndpointModels(profile?: Profile) {
 }
 
 /** OpenRouter public metadata, slimmed + cached by our worker. */
-export function useOpenRouterMeta() {
+export function useOpenRouterMeta(enabled = true) {
   return useQuery({
     queryKey: ["openrouter-meta"],
+    enabled,
     staleTime: 24 * 3600_000,
     gcTime: 24 * 3600_000,
     queryFn: fetchOpenRouterMeta,
