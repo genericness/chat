@@ -37,7 +37,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useMediaQuery } from "@/hooks/use-media-query"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { runSync } from "@/lib/sync"
@@ -137,9 +136,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [test, setTest] = useState<
     { state: "idle" | "testing" } | { state: "done"; result: EndpointTestResult }
   >({ state: "idle" })
-  const isMobile = useMediaQuery("(max-width: 639px)")
   const [section, setSection] = useState<Section>("Endpoints")
-  const show = (s: Section) => !isMobile || section === s
+  const show = (s: Section) => section === s
   useEffect(() => {
     if (open) setSection("Endpoints")
   }, [open])
@@ -221,7 +219,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               <X />
             </DialogClose>
           </div>
-          <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 sm:hidden">
+          <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
             {SECTIONS.map((s) => (
               <Button
                 key={s}
