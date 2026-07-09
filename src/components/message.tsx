@@ -11,6 +11,8 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  Square,
+  Volume2,
   Wrench,
   X,
 } from "lucide-react"
@@ -280,6 +282,50 @@ function AttachmentThumbs({ ids }: { ids: string[] }) {
   )
 }
 
+/** Markdown read as-is sounds terrible; strip the syntax, keep the words. */
+function speakable(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, " Code block omitted. ")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[`*_#>|]/g, "")
+}
+
+function SpeakButton({ text }: { text: string }) {
+  const [speaking, setSpeaking] = useState(false)
+  useEffect(
+    () => () => {
+      if (speaking) speechSynthesis.cancel()
+    },
+    [speaking]
+  )
+  if (!("speechSynthesis" in window) || !text) return null
+  const toggle = () => {
+    haptic()
+    if (speaking) {
+      speechSynthesis.cancel()
+      setSpeaking(false)
+      return
+    }
+    speechSynthesis.cancel() // one message at a time; the loser's onend resets it
+    const u = new SpeechSynthesisUtterance(speakable(text))
+    u.onend = () => setSpeaking(false)
+    u.onerror = () => setSpeaking(false)
+    speechSynthesis.speak(u)
+    setSpeaking(true)
+  }
+  return (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      className="text-muted-foreground"
+      aria-label={speaking ? "Stop reading" : "Read aloud"}
+      onClick={toggle}
+    >
+      {speaking ? <Square className="text-primary" /> : <Volume2 />}
+    </Button>
+  )
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -406,6 +452,7 @@ export const MessageBubble = memo(function MessageBubble({
       {message.status !== "streaming" && (
         <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/msg:opacity-100 pointer-coarse:opacity-100">
           <CopyButton text={message.content} />
+          <SpeakButton text={message.content} />
           {canRegenerate && (
             <Button
               variant="ghost"
