@@ -51,7 +51,29 @@ export function ChatSettings({ convId, open, onOpenChange }: ChatSettingsProps) 
 
         <div className="flex flex-col gap-4">
           <div className="grid gap-1.5">
-            <Label htmlFor="cs-system">System prompt</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="cs-system">System prompt</Label>
+              {(prefs.savedPrompts?.length ?? 0) > 0 && (
+                <Select
+                  value=""
+                  onValueChange={(id) => {
+                    const p = prefs.savedPrompts?.find((sp) => sp.id === id)
+                    if (p) void db.conversations.update(convId, { systemPrompt: p.prompt })
+                  }}
+                >
+                  <SelectTrigger className="h-7 w-auto gap-1 text-xs">
+                    <SelectValue placeholder="Use saved…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {prefs.savedPrompts!.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
             <Textarea
               id="cs-system"
               value={conv.systemPrompt ?? ""}

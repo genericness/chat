@@ -12,11 +12,18 @@ export interface Profile {
   defaultModel?: string
 }
 
+export interface SavedPrompt {
+  id: string
+  name: string
+  prompt: string
+}
+
 export interface Prefs {
   profiles: Profile[]
   activeProfileId?: string
   selectedModels?: string[]
   globalSystemPrompt?: string
+  savedPrompts?: SavedPrompt[]
   exaKey?: string
   e2bKey?: string
   /** "Sign in with ChatGPT" tokens — this browser only, like every key here. */

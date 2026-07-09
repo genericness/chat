@@ -15,6 +15,7 @@ import { authorizeMcpServer, disconnectMcpServer } from "@/lib/mcp-oauth"
 
 import { ChatGPTSignIn } from "@/components/chatgpt-sign-in"
 import { UsageSection } from "@/components/usage-section"
+import { PromptLibrary } from "@/components/prompt-library"
 
 function GithubIcon() {
   return (
@@ -506,6 +507,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           </div>
 
           <McpSection />
+
+          <div className="border-t border-border pt-4">
+            <PromptLibrary />
+          </div>
             </>
           )}
 
