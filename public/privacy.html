@@ -27,7 +27,7 @@
 
     <h2>What stays on your device</h2>
     <ul>
-      <li><strong>API keys</strong> are stored only in your browser or app's local storage. They are never synced or logged. A key transits our server only when you explicitly use one of the proxy-backed features described below.</li>
+      <li><strong>API keys</strong> are stored only in your browser or app's local storage. They are never sent to our server, never synced, and never logged.</li>
       <li><strong>Conversations</strong> are stored locally on your device (IndexedDB).</li>
       <li>Messages you send go directly from your device to the AI provider you configured, under that provider's privacy policy.</li>
     </ul>
@@ -46,15 +46,17 @@
     <h2>Proxied requests</h2>
     <p>
       A few features route through our server only because the third-party service
-      blocks direct browser requests: web search via Exa, the OpenCode Go and Zen
-      providers, and Sign in with ChatGPT. Those requests pass the relevant key or
-      OAuth token and message through per-request; they are not stored or logged.
-      ChatGPT model requests also pass through a dedicated forwarding service before
-      reaching ChatGPT because ChatGPT blocks Cloudflare Worker requests.
+      blocks direct browser requests (web search via Exa, and the OpenCode Zen
+      provider). Those requests pass your key through per-request; it is not stored
+      or logged.
     </p>
 
     <h2>Analytics</h2>
-    <p>We do not load third-party analytics or session-replay scripts.</p>
+    <p>
+      We collect anonymous, aggregate usage analytics (page views) that are not
+      linked to your identity. No advertising, no tracking across other sites, no
+      sale of data.
+    </p>
 
     <h2>Contact</h2>
     <p>Questions: <a href="mailto:claude@4x.rip">claude@4x.rip</a></p>

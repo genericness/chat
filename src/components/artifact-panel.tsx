@@ -148,35 +148,16 @@ export function ArtifactPanel({ convId }: { convId: string }) {
 
   if (!artifact) return null
 
-  const shareNative = () => {
-    if (!import.meta.env.VITE_API_BASE) return
-    void import("@/lib/native").then((module) =>
-      module.shareFile(`${artifact.artifactId}.html`, artifact.html)
+  const shareNative = () =>
+    void import("@/lib/native").then((m) =>
+      m.shareFile(`${artifact.artifactId}.html`, artifact.html)
     )
-  }
 
   const openInTab = () => {
     if (IS_NATIVE) return shareNative()
-    // A top-level HTML blob inherits our origin and could read localStorage/IDB.
-    // Keep generated code in the same opaque-origin sandbox used by the panel.
-    const popup = window.open("about:blank", "_blank")
-    if (!popup) return
-    popup.opener = null
-    popup.document.title = artifact.title
-    Object.assign(popup.document.documentElement.style, { width: "100%", height: "100%" })
-    Object.assign(popup.document.body.style, {
-      width: "100%",
-      height: "100%",
-      margin: "0",
-      overflow: "hidden",
-      background: "white",
-    })
-    const frame = popup.document.createElement("iframe")
-    frame.title = artifact.title
-    frame.setAttribute("sandbox", "allow-scripts allow-forms allow-modals allow-popups")
-    frame.srcdoc = artifact.html
-    Object.assign(frame.style, { width: "100%", height: "100%", border: "0" })
-    popup.document.body.append(frame)
+    const url = URL.createObjectURL(new Blob([artifact.html], { type: "text/html" }))
+    window.open(url, "_blank")
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
   const download = () => {

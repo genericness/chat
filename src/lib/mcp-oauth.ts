@@ -212,9 +212,6 @@ export async function authorizeMcpServer(
   if (!IS_NATIVE && !popup) {
     throw new Error("Popup blocked — allow popups for this site to connect.")
   }
-  // The callback uses BroadcastChannel, so the authorization server never
-  // needs an opener reference (which would let it navigate the chat tab).
-  if (popup) popup.opener = null
   try {
     const cfg = freshConfig(cfgIn.id) ?? cfgIn
     const { as, scope, resource } = await discover(cfg, wwwAuthenticate)
@@ -239,9 +236,6 @@ export async function authorizeMcpServer(
       popup.location.href = url.toString()
       code = await waitForCallback(state, popup)
     } else {
-      if (!import.meta.env.VITE_API_BASE) {
-        throw new Error("Native OAuth callback handling is unavailable in this build.")
-      }
       const [{ waitForMcpCallback }, { Browser }] = await Promise.all([
         import("@/lib/native"),
         import("@capacitor/browser"),
