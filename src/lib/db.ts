@@ -15,6 +15,8 @@ export interface Conversation {
   createdAt: number
   updatedAt: number
   deletedAt?: number
+  /** Public share token, set while this chat has a live public link. */
+  shareToken?: string
 }
 
 export interface SearchResult {

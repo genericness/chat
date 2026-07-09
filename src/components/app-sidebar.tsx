@@ -10,6 +10,7 @@ import {
   Pencil,
   Search,
   Settings,
+  Share2,
   Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { ShareDialog } from "@/components/share-dialog"
 import { db, deleteConversation, renameConversation } from "@/lib/db"
 import { exportChatJson, exportChatMarkdown } from "@/lib/transfer"
 import { cn } from "@/lib/utils"
@@ -47,6 +49,7 @@ export function AppSidebar({
   const { id: activeId } = useParams<{ id: string }>()
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
+  const [sharingId, setSharingId] = useState<string | null>(null)
 
   const conversations = useLiveQuery(() =>
     db.conversations
@@ -185,6 +188,9 @@ export function AppSidebar({
                         >
                           <Pencil /> Rename
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setSharingId(c.id)}>
+                          <Share2 /> Share…
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() =>
                             void exportChatMarkdown(c.id).catch(() =>
@@ -242,6 +248,13 @@ export function AppSidebar({
           </Button>
         </div>
       </aside>
+      {sharingId && (
+        <ShareDialog
+          convId={sharingId}
+          open={!!sharingId}
+          onOpenChange={(o) => !o && setSharingId(null)}
+        />
+      )}
     </>
   )
 }

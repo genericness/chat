@@ -8,6 +8,7 @@ import chatgpt from "./routes/chatgpt"
 import exa from "./routes/exa"
 import opencode from "./routes/opencode"
 import openrouter from "./routes/openrouter"
+import share from "./routes/share"
 import sync from "./routes/sync"
 
 const app = new Hono<AppEnv>()
@@ -21,6 +22,7 @@ app.route("/api/openrouter", openrouter)
 app.route("/api/exa", exa)
 app.route("/api/opencode", opencode)
 app.route("/api/sync", sync)
+app.route("/api/share", share)
 
 app.get("/api/me", async (c) => {
   const uid = await getSessionUserId(c)
