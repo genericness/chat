@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { ArrowDown } from "lucide-react"
 
 import { ReplyGroup } from "@/components/compare-group"
@@ -8,10 +8,19 @@ import type { Message } from "@/lib/db"
 
 type Item = { key: string; msg: Message } | { key: string; group: Message[] }
 
+// ponytail: windowed render, not virtualization — long chats mount only the
+// tail. Reach for react-virtuoso only if 40 mounted items ever jank.
+const INITIAL_ITEMS = 40
+
 export function MessageList({ messages }: { messages: Message[] }) {
   const ref = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const [atBottom, setAtBottom] = useState(true)
+  const [showAll, setShowAll] = useState(false)
+  // Frozen at first render so the window only grows; a moving "last N" slice
+  // would drop items off the top mid-read whenever a new message lands.
+  const startRef = useRef(-1)
+  const anchor = useRef<{ top: number; height: number } | null>(null)
 
   useEffect(() => {
     if (stick.current) {
@@ -49,6 +58,27 @@ export function MessageList({ messages }: { messages: Message[] }) {
   }
   const lastUserId = [...messages].reverse().find((m) => m.role === "user")?.id
 
+  if (items.length && startRef.current < 0) {
+    startRef.current = Math.max(0, items.length - INITIAL_ITEMS)
+  }
+  const start =
+    showAll || startRef.current < 0
+      ? 0
+      : Math.min(startRef.current, Math.max(0, items.length - INITIAL_ITEMS))
+  const visible = start > 0 ? items.slice(start) : items
+
+  // Keep the viewport anchored on the same message when the earlier ones
+  // expand above it. Absolute, from values captured at click time — browsers
+  // disagree on what scrollTop is mid-update, and Safari has no native
+  // scroll anchoring at all.
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (el && anchor.current) {
+      el.scrollTop = anchor.current.top + (el.scrollHeight - anchor.current.height)
+      anchor.current = null
+    }
+  }, [showAll])
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div
@@ -63,7 +93,21 @@ export function MessageList({ messages }: { messages: Message[] }) {
         }}
       >
         <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6">
-          {items.map((item) =>
+          {start > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mx-auto text-muted-foreground"
+              onClick={() => {
+                const el = ref.current
+                if (el) anchor.current = { top: el.scrollTop, height: el.scrollHeight }
+                setShowAll(true)
+              }}
+            >
+              Show {start} earlier {start === 1 ? "message" : "messages"}
+            </Button>
+          )}
+          {visible.map((item) =>
             "msg" in item ? (
               <MessageBubble key={item.key} message={item.msg} />
             ) : (

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react"
+import Dexie from "dexie"
 import { useLiveQuery } from "dexie-react-hooks"
 import {
   ArrowUp,
@@ -19,7 +20,7 @@ import { ShareDialog } from "@/components/share-dialog"
 import { ModelPicker } from "@/components/model-picker"
 import { Button } from "@/components/ui/button"
 import { useBackClose } from "@/hooks/use-back-close"
-import { db, type Message } from "@/lib/db"
+import { db } from "@/lib/db"
 import { sendMessage, stopConversation } from "@/lib/generation"
 import { haptic } from "@/lib/haptics"
 import { activeProfile, usePrefs } from "@/lib/profiles"
@@ -51,27 +52,36 @@ export function Composer({ convId, className }: ComposerProps) {
   useBackClose(chatSettingsOpen, () => setChatSettingsOpen(false))
   useBackClose(shareOpen, () => setShareOpen(false))
 
-  const streaming = useLiveQuery(
-    () =>
-      convId
-        ? db.messages
-            .where("status")
-            .equals("streaming")
-            .filter((m) => m.convId === convId)
-            .toArray()
-        : Promise.resolve([] as Message[]),
-    [convId]
-  )
-  const isStreaming = (streaming?.length ?? 0) > 0
+  // count(), not toArray(): this re-runs on every 100ms streaming write, and
+  // reading the row would clone its ever-growing content each time.
+  const isStreaming =
+    (useLiveQuery(
+      () =>
+        convId
+          ? db.messages
+              .where("status")
+              .equals("streaming")
+              .filter((m) => m.convId === convId)
+              .count()
+          : Promise.resolve(0),
+      [convId]
+    ) ?? 0) > 0
 
   // Compare mode: after all candidates settle with none promoted, block sending
   // until the user picks a response to continue the thread from.
   const needsPromote = useLiveQuery(async () => {
     if (!convId) return false
-    const msgs = await db.messages.where("convId").equals(convId).sortBy("seq")
-    const lastUser = [...msgs].reverse().find((m) => m.role === "user")
-    if (!lastUser) return false
-    const replies = msgs.filter((m) => m.replyTo === lastUser.id)
+    // Also re-run at 10Hz while streaming — walk back only to the last user
+    // message instead of cloning the whole conversation each time.
+    const tail = await db.messages
+      .where("[convId+seq]")
+      .between([convId, Dexie.minKey], [convId, Dexie.maxKey])
+      .reverse()
+      .until((m) => m.role === "user", true)
+      .toArray()
+    const lastUser = tail[tail.length - 1]
+    if (lastUser?.role !== "user") return false
+    const replies = tail.filter((m) => m.replyTo === lastUser.id)
     return (
       replies.length > 1 &&
       !replies.some((r) => r.active) &&

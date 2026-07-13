@@ -1,3 +1,4 @@
+import { useMemo, useRef } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import { useParams } from "react-router-dom"
 
@@ -9,13 +10,40 @@ import { db, type Message } from "@/lib/db"
 
 export function ChatPage() {
   const { id } = useParams<{ id: string }>()
-  const messages = useLiveQuery(
+  const live = useLiveQuery(
     () =>
       id
         ? db.messages.where("convId").equals(id).sortBy("seq")
         : Promise.resolve([] as Message[]),
     [id]
   )
+
+  // The 100ms streaming write-through re-runs the query above, which returns
+  // all-new row objects and defeats MessageBubble's memo — every settled
+  // message re-rendered (and sources-bearing ones re-parsed markdown) at 10Hz.
+  // Reuse the previous object when a row hasn't visibly changed; fields that
+  // settle (stats, searchResults, toolCalls) always land with a status flip.
+  const rowCache = useRef(new Map<string, Message>())
+  const messages = useMemo(() => {
+    const prev = rowCache.current
+    const next = new Map<string, Message>()
+    const rows = (live ?? []).map((m) => {
+      const old = prev.get(m.id)
+      const row =
+        old &&
+        old.status !== "streaming" &&
+        old.status === m.status &&
+        old.active === m.active &&
+        old.content === m.content &&
+        old.reasoning === m.reasoning
+          ? old
+          : m
+      next.set(m.id, row)
+      return row
+    })
+    rowCache.current = next
+    return rows
+  }, [live])
 
   if (!id) {
     return (
@@ -39,7 +67,7 @@ export function ChatPage() {
   return (
     <div className="flex flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
-        <MessageList messages={messages ?? []} />
+        <MessageList key={id} messages={messages} />
         <div className="flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <Composer convId={id} />
         </div>
