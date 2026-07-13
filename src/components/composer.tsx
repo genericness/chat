@@ -223,7 +223,7 @@ export function Composer({ convId, className }: ComposerProps) {
               needsPromote
                 ? "Pick a response to continue"
                 : isStreaming
-                  ? "Interject — the model sees it before its next step"
+                  ? "Interject mid-run…"
                   : "Ask anything"
             }
             disabled={needsPromote}
