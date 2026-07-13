@@ -33,6 +33,10 @@ export interface ToolCallRecord {
   args: string
   /** streaming = arguments still being generated; running = executing */
   status: "streaming" | "running" | "done" | "error"
+  /** Offset into message.content where this call happened (a round boundary), so the UI can render it in place. */
+  at?: number
+  /** Truncated tool output, for the chip details popover. */
+  result?: string
 }
 
 export interface MessageStats {

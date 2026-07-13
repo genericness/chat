@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import {
   ArrowUp,
@@ -124,7 +124,7 @@ export function ArtifactCards({ message }: { message: Message }) {
   )
 }
 
-export function QuestionCard({ q }: { q: PendingQuestion }) {
+export function QuestionCard({ q, model }: { q: PendingQuestion; model?: string }) {
   const [selected, setSelected] = useState<string[]>([])
   const [text, setText] = useState("")
 
@@ -133,7 +133,8 @@ export function QuestionCard({ q }: { q: PendingQuestion }) {
   }
 
   return (
-    <div className="flex max-w-xl flex-col gap-3 rounded-xl border border-primary/40 bg-card/60 p-4">
+    <div className="flex w-full max-w-xl flex-col gap-3 rounded-xl border border-primary/40 bg-card/60 p-4 shadow-lg">
+      {model && <span className="-mb-2 text-xs text-muted-foreground">{model} asks</span>}
       <p className="text-sm font-medium">{q.question}</p>
       {q.options && q.options.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -186,10 +187,27 @@ export function QuestionCard({ q }: { q: PendingQuestion }) {
 function chipLabel(c: NonNullable<Message["toolCalls"]>[number]): string {
   // MCP tools are qualified "server__tool"; show the tool part.
   let label = c.name.split("__").pop() ?? c.name
-  const detail =
-    /"(?:query|title)"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(c.args)?.[1] ??
-    /"question"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(c.args)?.[1]
-  if (detail) label += `: “${detail.slice(0, 60)}”`
+  let args: Record<string, unknown> | undefined
+  try {
+    args = JSON.parse(c.args || "{}")
+  } catch {
+    // still streaming — fall back to regex below
+  }
+  // Computer use: say what the action actually is, not just "computer_action".
+  if (label === "computer_action" && typeof args?.action === "string") {
+    label = `computer: ${args.action}`
+    if (typeof args.x === "number") label += ` (${args.x}, ${args.y})`
+    if (typeof args.text === "string") label += ` “${args.text.slice(0, 40)}”`
+    if (typeof args.keys === "string") label += ` ${args.keys}`
+    if (typeof args.amount === "number") label += ` ${args.amount}`
+    return label
+  }
+  const detail = args
+    ? ["query", "title", "question", "command", "path", "url", "code"]
+        .map((k) => args[k])
+        .find((v): v is string => typeof v === "string" && !!v)
+    : /"(?:query|title|question|command|path|url)"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(c.args)?.[1]
+  if (detail) label += `: “${detail.split("\n")[0].slice(0, 60)}”`
   // Writing an artifact can take a while — show the document growing.
   if (
     (c.status === "streaming" || c.status === "running") &&
@@ -201,26 +219,90 @@ function chipLabel(c: NonNullable<Message["toolCalls"]>[number]): string {
   return label
 }
 
+function fmtArgs(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw || "{}"), null, 2)
+  } catch {
+    return raw
+  }
+}
+
 export function ToolChips({ calls }: { calls: NonNullable<Message["toolCalls"]> }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {calls.map((c, i) => (
-        <span
-          key={c.id + i}
-          className="flex max-w-80 items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground"
-        >
-          {c.status === "streaming" || c.status === "running" ? (
-            <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
-          ) : c.status === "error" ? (
-            <X className="size-3 shrink-0 text-destructive" />
-          ) : (
-            <Wrench className="size-3 shrink-0 text-primary" />
-          )}
-          <span className="truncate">{chipLabel(c)}</span>
-        </span>
+        <Popover key={c.id + i}>
+          <PopoverTrigger
+            render={
+              <button className="flex max-w-80 cursor-pointer items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground">
+                {c.status === "streaming" || c.status === "running" ? (
+                  <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
+                ) : c.status === "error" ? (
+                  <X className="size-3 shrink-0 text-destructive" />
+                ) : (
+                  <Wrench className="size-3 shrink-0 text-primary" />
+                )}
+                <span className="truncate">{chipLabel(c)}</span>
+              </button>
+            }
+          />
+          <PopoverContent
+            side="top"
+            className="max-h-80 w-96 max-w-[calc(100vw-2rem)] gap-1 overflow-y-auto px-3 py-2 text-xs"
+          >
+            <span className="font-medium">{c.name}</span>
+            <pre className="overflow-x-auto whitespace-pre-wrap text-muted-foreground">
+              {fmtArgs(c.args)}
+            </pre>
+            {c.result && (
+              <>
+                <span className="mt-1 font-medium">result</span>
+                <pre className="overflow-x-auto whitespace-pre-wrap text-muted-foreground">
+                  {c.result}
+                </pre>
+              </>
+            )}
+          </PopoverContent>
+        </Popover>
       ))}
     </div>
   )
+}
+
+/**
+ * Assistant text with tool chips rendered in place: each round's calls appear
+ * exactly where they happened in the reply (at their recorded content offset).
+ */
+export function AssistantContent({
+  message,
+  sources,
+}: {
+  message: Message
+  sources?: Message["searchResults"]
+}) {
+  const streaming = message.status === "streaming"
+  const content = message.content
+  // Journal is chronological and offsets only grow — group consecutive calls.
+  const groups: { at: number; calls: NonNullable<Message["toolCalls"]> }[] = []
+  for (const c of message.toolCalls ?? []) {
+    const at = Math.min(c.at ?? 0, content.length)
+    const last = groups[groups.length - 1]
+    if (last && last.at === at) last.calls.push(c)
+    else groups.push({ at, calls: [c] })
+  }
+  const parts: ReactNode[] = []
+  let prev = 0
+  groups.forEach((g, i) => {
+    const seg = content.slice(prev, g.at)
+    if (seg.trim()) parts.push(<Markdown key={`md${i}`} text={seg} sources={sources} />)
+    parts.push(<ToolChips key={`tc${i}`} calls={g.calls} />)
+    prev = g.at
+  })
+  const tail = content.slice(prev)
+  if (tail.trim() || streaming || !groups.length) {
+    parts.push(<Markdown key="tail" text={tail} streaming={streaming} sources={sources} />)
+  }
+  return <div className="flex flex-col gap-1.5">{parts}</div>
 }
 
 export function Sources({ results }: { results: NonNullable<Message["searchResults"]> }) {
@@ -421,22 +503,13 @@ export const MessageBubble = memo(function MessageBubble({
         <span className="text-xs text-muted-foreground">{message.model}</span>
       )}
       <Reasoning message={message} />
-      {message.toolCalls && message.toolCalls.length > 0 && (
-        <ToolChips calls={message.toolCalls} />
-      )}
       <ArtifactCards message={message} />
-      {message.pendingQuestion && message.status === "streaming" && (
-        <QuestionCard key={message.pendingQuestion.toolCallId} q={message.pendingQuestion} />
-      )}
       <div>
-        <Markdown
-          text={message.content}
-          streaming={message.status === "streaming"}
-          sources={citeSources}
-        />
+        <AssistantContent message={message} sources={citeSources} />
         {message.status === "streaming" &&
           !message.content &&
           !message.reasoning &&
+          !message.toolCalls?.length &&
           !message.pendingQuestion && (
             <span className="mt-1 inline-block h-4 w-2 animate-pulse rounded-xs bg-primary/70" />
           )}

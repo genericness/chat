@@ -27,6 +27,32 @@ import { gatherTools } from "@/lib/tools"
 // Module singleton: survives route changes; Dexie is the source of truth for UI.
 const controllers = new Map<string, AbortController>()
 
+// Mid-run interjections: user text typed while a reply streams. Shown in the
+// chat immediately; the active stream drains the queue into its transcript
+// before each tool round so the model sees it before its next step.
+// ponytail: keyed per conversation, drained only by the active stream — in
+// compare mode (all candidates inactive) leftovers are answered after promote.
+const interjections = new Map<string, { id: string; text: string }[]>()
+
+/** Queue extra user input into a running generation. Returns the message id. */
+export async function interject(convId: string, text: string): Promise<string> {
+  const row: Message = {
+    id: crypto.randomUUID(),
+    convId,
+    seq: await nextSeq(convId),
+    role: "user",
+    content: text,
+    active: true,
+    status: "done",
+    createdAt: Date.now(),
+  }
+  await db.messages.add(row)
+  const q = interjections.get(convId) ?? []
+  q.push({ id: row.id, text })
+  interjections.set(convId, q)
+  return row.id
+}
+
 // Artifacts easily exceed 8K output tokens; models that reject a high cap get
 // one bare retry (see requestRound), so err on the generous side.
 const DEFAULT_MAX_TOKENS = 32768
@@ -177,6 +203,11 @@ export async function startAssistant(
   await db.messages.add(msg)
   await touchConversation(convId)
 
+  // Interjections queued before this stream started are already Dexie rows,
+  // so buildContext below picks them up — drop them from the queue to avoid
+  // feeding them to the model twice.
+  if (opts.active) interjections.get(convId)?.splice(0)
+
   const context = await buildContext(convId, msg.seq)
   const controller = new AbortController()
   controllers.set(msg.id, controller)
@@ -219,6 +250,7 @@ export async function startAssistant(
       name: c.function.name,
       args: c.function.arguments,
       status: "streaming" as const,
+      at: buf.length,
     }))
     schedule()
   }
@@ -349,6 +381,13 @@ export async function startAssistant(
 
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         roundBuf = ""
+        // Anything the user typed since the last round goes in front of the
+        // model now, before it decides its next step.
+        if (opts.active) {
+          for (const it of interjections.get(convId)?.splice(0) ?? []) {
+            transcript.push({ role: "user", content: it.text })
+          }
+        }
         if (round === MAX_TOOL_ROUNDS - 1) tools = [] // force a final text answer
         // The search toggle should mean search actually happens: force the
         // web_search call on the first round (models with an image to look at
@@ -399,6 +438,7 @@ export async function startAssistant(
             name: tc.function.name,
             args: tc.function.arguments,
             status: "running",
+            at: buf.length,
           })
         }
         await db.messages.update(msg.id, { toolCalls: [...journal] })
@@ -439,6 +479,7 @@ export async function startAssistant(
               if (entry) entry.status = "error"
             }
           }
+          if (entry) entry.result = output.slice(0, 2000)
           transcript.push({ role: "tool", tool_call_id: tc.id, content: output })
           await db.messages.update(msg.id, { toolCalls: [...journal] })
         }
@@ -453,10 +494,19 @@ export async function startAssistant(
         stats: stats(),
         ...(gathered.sources.length && { searchResults: gathered.sources }),
       })
+      // Interjections that arrived after the last round would otherwise sit
+      // unanswered — reply to them in a fresh turn.
+      const leftover = opts.active ? (interjections.get(convId)?.splice(0) ?? []) : []
+      if (leftover.length) {
+        void startAssistant(convId, leftover[leftover.length - 1].id, opts)
+      }
     } catch (err) {
       window.clearTimeout(timer)
       endStreamHaptics(false)
       liveJournal = [] // drop never-executed streaming entries from the final state
+      // Stopped/errored: the interjection rows stay in the chat, but don't
+      // carry them into a run the user just killed.
+      if (opts.active) interjections.get(convId)?.splice(0)
       if (controller.signal.aborted) {
         await db.messages.update(msg.id, {
           ...patch(),

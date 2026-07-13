@@ -21,7 +21,7 @@ import { ModelPicker } from "@/components/model-picker"
 import { Button } from "@/components/ui/button"
 import { useBackClose } from "@/hooks/use-back-close"
 import { db } from "@/lib/db"
-import { sendMessage, stopConversation } from "@/lib/generation"
+import { interject, sendMessage, stopConversation } from "@/lib/generation"
 import { haptic } from "@/lib/haptics"
 import { activeProfile, usePrefs } from "@/lib/profiles"
 import { cn } from "@/lib/utils"
@@ -112,7 +112,22 @@ export function Composer({ convId, className }: ComposerProps) {
 
   const send = async () => {
     const t = text.trim()
-    if ((!t && pending.length === 0) || isStreaming || needsPromote || sending) return
+    if (needsPromote || sending) return
+    // Butt in on a running generation: the text lands in the transcript
+    // before the model's next tool round (great for steering computer use).
+    if (isStreaming) {
+      if (!t || !convId) return
+      haptic()
+      setText("")
+      try {
+        await interject(convId, t)
+      } catch (err) {
+        setText(t)
+        toast.error(err instanceof Error ? err.message : String(err))
+      }
+      return
+    }
+    if (!t && pending.length === 0) return
     haptic()
     setText("")
     const files = pending.map((p) => p.file)
@@ -204,7 +219,13 @@ export function Composer({ convId, className }: ComposerProps) {
                 addFiles(e.clipboardData.files)
               }
             }}
-            placeholder={needsPromote ? "Pick a response to continue" : "Ask anything"}
+            placeholder={
+              needsPromote
+                ? "Pick a response to continue"
+                : isStreaming
+                  ? "Interject — the model sees it before its next step"
+                  : "Ask anything"
+            }
             disabled={needsPromote}
             className="order-first max-h-44 min-h-8 w-full resize-none self-center bg-transparent px-2 pt-1.5 pb-1 text-base leading-6 outline-none field-sizing-content placeholder:text-muted-foreground disabled:opacity-60 sm:order-none sm:w-auto sm:flex-1 sm:px-1 sm:py-1 sm:text-[0.95rem]"
           />
@@ -245,7 +266,7 @@ export function Composer({ convId, className }: ComposerProps) {
           )}
           <div aria-hidden className="grow sm:hidden" />
           <ModelPicker profile={profile} />
-          {isStreaming ? (
+          {isStreaming && !text.trim() ? (
             <Button
               size="icon"
               variant="secondary"

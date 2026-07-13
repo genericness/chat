@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom"
 
 import { ArtifactPanel } from "@/components/artifact-panel"
 import { Composer } from "@/components/composer"
+import { QuestionCard } from "@/components/message"
 import { MessageList } from "@/components/message-list"
 import { ShinyText } from "@/components/shiny-text"
 import { db, type Message } from "@/lib/db"
@@ -64,10 +65,25 @@ export function ChatPage() {
     )
   }
 
+  // Questions pin above the composer, not inline in the transcript — with a
+  // long reply streaming (or the user scrolled up) an inline card is missable.
+  const pendingQs = messages.filter((m) => m.status === "streaming" && m.pendingQuestion)
+
   return (
     <div className="flex flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
         <MessageList key={id} messages={messages} />
+        {pendingQs.length > 0 && (
+          <div className="flex flex-col items-center gap-2 px-4 pb-2">
+            {pendingQs.map((m) => (
+              <QuestionCard
+                key={m.pendingQuestion!.toolCallId}
+                q={m.pendingQuestion!}
+                model={pendingQs.length > 1 ? m.model : undefined}
+              />
+            ))}
+          </div>
+        )}
         <div className="flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <Composer convId={id} />
         </div>
