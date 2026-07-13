@@ -80,8 +80,10 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   }
 
   return (
-    <div className="not-prose my-3 overflow-hidden rounded-lg border border-border/70 bg-black/30">
-      <div className="flex items-center justify-between border-b border-border/50 py-0.5 pr-1 pl-3">
+    // no overflow-hidden here — it would give the sticky header nothing to stick to
+    <div className="not-prose my-3 rounded-lg border border-border/70 bg-black/30">
+      {/* opaque bg (= container tint composited on the page bg) so code doesn't show through while stuck */}
+      <div className="sticky top-0 flex items-center justify-between rounded-t-lg border-b border-border/50 bg-[color-mix(in_srgb,var(--background)_70%,black)] py-0.5 pr-1 pl-3">
         <span className="font-mono text-xs text-muted-foreground">{lang}</span>
         <Button
           variant="ghost"
