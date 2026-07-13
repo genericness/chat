@@ -277,7 +277,7 @@ function RoomLive({
                 m.kind === "user" ? (
                   <div key={m.mid} className="flex flex-col items-end gap-1">
                     <span className="px-1 text-xs text-muted-foreground">{m.authorName}</span>
-                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[0.95rem] whitespace-pre-wrap">
+                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[0.95rem] wrap-anywhere whitespace-pre-wrap">
                       {m.content}
                     </div>
                   </div>

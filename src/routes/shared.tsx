@@ -58,7 +58,7 @@ export function SharedChat() {
         {snapshot.messages.map((m, i) =>
           m.role === "user" ? (
             <div key={i} className="flex justify-end">
-              <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[0.95rem] whitespace-pre-wrap">
+              <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[0.95rem] wrap-anywhere whitespace-pre-wrap">
                 {m.content}
               </div>
             </div>

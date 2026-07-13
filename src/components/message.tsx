@@ -392,7 +392,7 @@ export const MessageBubble = memo(function MessageBubble({
       <div className="group/msg flex flex-col items-end gap-1">
         {message.attachmentIds && <AttachmentThumbs ids={message.attachmentIds} />}
         {message.content && (
-          <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[0.95rem] whitespace-pre-wrap">
+          <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[0.95rem] wrap-anywhere whitespace-pre-wrap">
             {message.content}
           </div>
         )}

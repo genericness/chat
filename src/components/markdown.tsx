@@ -14,7 +14,7 @@ export const Markdown = memo(function Markdown(props: {
   return (
     <Suspense
       fallback={
-        <div className="text-[0.95rem] leading-relaxed whitespace-pre-wrap">{props.text}</div>
+        <div className="text-[0.95rem] leading-relaxed wrap-anywhere whitespace-pre-wrap">{props.text}</div>
       }
     >
       <MarkdownImpl {...props} />
