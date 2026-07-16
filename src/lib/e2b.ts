@@ -41,8 +41,10 @@ interface E2bMock {
   createDesktop(): Promise<DesktopHandle>
 }
 
-const CODE_TIMEOUT_MS = 2 * 60_000
-const DESKTOP_TIMEOUT_MS = 2 * 60_000
+// Idle lifetime (extended on every use): long enough to survive the model
+// thinking/writing between calls, short enough to stay a cost backstop.
+const CODE_TIMEOUT_MS = 5 * 60_000
+const DESKTOP_TIMEOUT_MS = 5 * 60_000
 // Small enough to send screenshots at native size without huge token cost,
 // so the model's click coordinates line up with what it sees.
 const DESKTOP_RESOLUTION: [number, number] = [1024, 768]
@@ -112,11 +114,16 @@ async function createDesktopSandbox(): Promise<DesktopHandle> {
   await sb.stream.start({ requireAuth: true })
   const streamUrl = sb.stream.getUrl({ authKey: sb.stream.getAuthKey(), viewOnly: true })
   const size = await sb.getScreenSize().catch(() => null)
+  // Without this, the desktop hits its idle timeout ~2 min into every
+  // computer-use session and all later actions land on a dead sandbox.
+  const refresh = () => void sb.setTimeout(DESKTOP_TIMEOUT_MS).catch(() => {})
   return {
     async screenshot() {
+      refresh()
       return sb.screenshot()
     },
     async act(a) {
+      refresh()
       switch (a.action) {
         case "click":
           return sb.leftClick(a.x, a.y)

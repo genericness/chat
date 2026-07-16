@@ -2,6 +2,7 @@ import { toast } from "sonner"
 
 import { AGENT_TOOL_DEFS, AGENT_TOOL_NAMES, executeAgentTool } from "@/lib/agent-tools"
 import type { SearchResult } from "@/lib/db"
+import { killConversationSandboxes } from "@/lib/e2b"
 import { CODE_TOOL_DEFS, COMPUTER_TOOL_DEFS, E2B_TOOL_NAMES, executeE2bTool } from "@/lib/e2b-tools"
 import { exaContents, exaSearch, pageContentsBlock, searchContextBlock } from "@/lib/exa"
 import { connectMcp, McpAuthRequiredError } from "@/lib/mcp"
@@ -160,18 +161,29 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
       // Only execute if the tool was actually offered (key present); a model
       // that invents the name otherwise gets told, never a silent sandbox.
       if (!getPrefs().e2bKey) return `Error: "${name}" is unavailable — no E2B API key is configured.`
-      const r = await executeE2bTool(name, args as Record<string, unknown>, {
-        convId: opts.convId,
-        msgId: opts.msgId,
-        pushImage: (url) => images.push(url),
-      })
-      if (r !== null) return r
+      try {
+        const r = await executeE2bTool(name, args as Record<string, unknown>, {
+          convId: opts.convId,
+          msgId: opts.msgId,
+          pushImage: (url) => images.push(url),
+        })
+        if (r !== null) return r
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        // The sandbox hit its idle timeout (or died): drop the cached handle so
+        // the next call gets a fresh one instead of the whole chat staying wedged.
+        if (/not found|not running|no longer|terminated|expired|timed? ?out|gone|502|deadline/i.test(msg)) {
+          void killConversationSandboxes(opts.convId)
+          return `Error: the sandbox is gone (${msg}). A fresh sandbox starts on your next tool call — redo any setup (files, installs) it needs.`
+        }
+        throw err
+      }
     }
 
     if (name === "web_search") {
       const query = String((args as { query?: unknown }).query ?? "")
       if (!query.trim()) return "Error: query must not be empty — call web_search again with a search query."
-      const results = await exaSearch(query)
+      const results = await exaSearch(query, signal)
       sources.push(...results)
       return searchContextBlock(results)
     }
@@ -182,7 +194,7 @@ export async function gatherTools(opts: GatherOptions): Promise<GatheredTools> {
         ? a.urls.map(String)
         : [a.urls, a.url].filter((v): v is string => typeof v === "string")
       if (!urls.length) return "Error: provide one or more urls."
-      const pages = await exaContents(urls)
+      const pages = await exaContents(urls, signal)
       // Lightweight source pills for the UI; the model gets the full text below.
       for (const p of pages) {
         if (!p.error) sources.push({ title: p.title, url: p.url, text: p.text.slice(0, 200) })

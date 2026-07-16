@@ -147,6 +147,8 @@ export async function executeAgentTool(
     await db.messages.update(ctx.msgId, { pendingQuestion: q })
     try {
       const answer = await new Promise<string>((resolve, reject) => {
+        // already aborted → the listener below would never fire; bail now
+        if (ctx.signal.aborted) return reject(new DOMException("aborted", "AbortError"))
         pendingAsks.set(ctx.toolCallId, { resolve, reject })
         ctx.signal.addEventListener(
           "abort",

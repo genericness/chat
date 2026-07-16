@@ -58,6 +58,19 @@ export async function interject(convId: string, text: string): Promise<string> {
 const DEFAULT_MAX_TOKENS = 32768
 // Generous: agentic builds chain ask → create → edit → edit → … before answering.
 const MAX_TOOL_ROUNDS = 12
+// A tool that never settles must not wedge the whole run. Above run_command's
+// internal 120s cap so genuine tool timeouts surface their own errors first.
+const TOOL_TIMEOUT_MS = 150_000
+
+/** Reject when the signal fires even if `p` never settles (some executors ignore signals). */
+function raceAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new DOMException("aborted", "AbortError"))
+    if (signal.aborted) return onAbort()
+    signal.addEventListener("abort", onAbort, { once: true })
+    p.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort))
+  })
+}
 
 function isValidJson(s: string): boolean {
   try {
@@ -465,17 +478,28 @@ export async function startAssistant(
                 : `Error: the ${tc.function.name} arguments were not valid JSON. Call the tool again with corrected arguments.`
             if (entry) entry.status = "error"
           } else {
+            // ask_user waits on the human indefinitely by design; everything
+            // else gets a watchdog so a hung tool can't wedge the run.
+            const timeoutMs =
+              (import.meta.env.DEV &&
+                (window as { __toolTimeoutMs?: number }).__toolTimeoutMs) ||
+              TOOL_TIMEOUT_MS
+            const timeout =
+              tc.function.name === "ask_user" ? null : AbortSignal.timeout(timeoutMs)
+            const signal = timeout
+              ? AbortSignal.any([controller.signal, timeout])
+              : controller.signal
             try {
-              output = await gathered.execute(
-                tc.function.name,
-                tc.function.arguments,
-                controller.signal,
-                tc.id
+              output = await raceAbort(
+                gathered.execute(tc.function.name, tc.function.arguments, signal, tc.id),
+                signal
               )
               if (entry) entry.status = "done"
             } catch (err) {
               if (controller.signal.aborted) throw err
-              output = `Error: ${err instanceof Error ? err.message : String(err)}`
+              output = timeout?.aborted
+                ? `Error: ${tc.function.name} timed out after ${Math.round(timeoutMs / 1000)}s and was abandoned (it may still finish in the background). Try a smaller or faster step.`
+                : `Error: ${err instanceof Error ? err.message : String(err)}`
               if (entry) entry.status = "error"
             }
           }

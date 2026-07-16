@@ -211,10 +211,40 @@ export async function streamChatCompletion(req: CompletionRequest): Promise<Comp
     },
   })
 
+  // A connection that dies without a FIN leaves read() pending forever; treat
+  // a long silent gap as a stalled stream. Provider keep-alive pings count as
+  // data, so this only fires when nothing at all is arriving.
+  const idleMs =
+    (import.meta.env.DEV &&
+      (window as { __streamIdleMs?: number }).__streamIdleMs) ||
+    180_000
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
   for (;;) {
-    const { done, value } = await reader.read()
+    let idleTimer: number | undefined
+    let chunk: ReadableStreamReadResult<Uint8Array<ArrayBuffer>>
+    try {
+      chunk = await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => {
+          idleTimer = window.setTimeout(
+            () =>
+              reject(
+                new ApiError(
+                  `The provider sent no data for ${Math.round(idleMs / 60_000)} min — the connection stalled. Try again.`
+                )
+              ),
+            idleMs
+          )
+        }),
+      ])
+    } catch (err) {
+      await reader.cancel().catch(() => {})
+      throw err
+    } finally {
+      window.clearTimeout(idleTimer)
+    }
+    const { done, value } = chunk
     if (done) break
     parser.feed(decoder.decode(value, { stream: true }))
     if (streamError) {
