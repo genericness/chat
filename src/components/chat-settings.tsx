@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Textarea } from "@/components/ui/textarea"
+import { UsageSection } from "@/components/usage-section"
 import { db, type ConversationSettings } from "@/lib/db"
 import { usePrefs } from "@/lib/profiles"
 
@@ -40,7 +41,7 @@ export function ChatSettings({ convId, open, onOpenChange }: ChatSettingsProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Chat settings</DialogTitle>
           <DialogDescription>
@@ -163,6 +164,8 @@ export function ChatSettings({ convId, open, onOpenChange }: ChatSettingsProps) 
               </SelectContent>
             </Select>
           </div>
+
+          <UsageSection convId={convId} />
         </div>
       </DialogContent>
     </Dialog>

@@ -24,12 +24,19 @@ function fmtCost(n: number): string {
   return n < 0.01 ? `<$0.01` : `$${n.toFixed(2)}`
 }
 
-export function UsageSection() {
+/** Token usage + estimated cost, across all chats or scoped to one thread. */
+export function UsageSection({ convId }: { convId?: string }) {
   const meta = useOpenRouterMeta().data
   // Only assistant messages carry token stats.
   const stats = useLiveQuery(
-    () => db.messages.filter((m) => m.role === "assistant" && !!m.stats).toArray(),
-    []
+    () =>
+      (convId
+        ? db.messages.where("convId").equals(convId)
+        : db.messages
+      )
+        .filter((m) => m.role === "assistant" && !!m.stats)
+        .toArray(),
+    [convId]
   )
 
   const { rows, totalCost, hasUnpriced } = useMemo(() => {
@@ -69,7 +76,9 @@ export function UsageSection() {
       <Label>Usage</Label>
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No usage yet. Token counts and estimated cost appear here as you chat.
+          {convId
+            ? "No usage in this chat yet. Token counts appear here once a reply reports them."
+            : "No usage yet. Token counts and estimated cost appear here as you chat."}
         </p>
       ) : (
         <>
