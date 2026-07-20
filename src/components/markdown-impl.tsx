@@ -7,6 +7,7 @@ import remarkMath from "remark-math"
 import { Check, Copy } from "lucide-react"
 
 import "katex/dist/katex.min.css"
+import "katex/contrib/mhchem" // \ce{...} chemistry notation
 import "highlight.js/styles/github-dark.css"
 
 import { Button } from "@/components/ui/button"
@@ -59,6 +60,27 @@ function makeCitationPlugin(sources: SearchResult[]) {
     }
     walk(tree)
   }
+}
+
+// remark-math only parses $/$$ delimiters, but most models emit OpenAI-style
+// \( \) and \[ \]. Convert outside of code fences and inline code. Display
+// math must be a fenced block ($$ on its own lines) — a single-line $$x$$
+// parses as inline math — so \[ \] and one-line $$ $$ both get refenced.
+function normalizeMath(md: string): string {
+  if (!md.includes("\\(") && !md.includes("\\[") && !md.includes("$$")) return md
+  const block = (m: string) => `\n\n$$\n${m.trim()}\n$$\n\n`
+  return md
+    .split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/g)
+    .map((seg, i) =>
+      i % 2 // odd segments are the captured code spans — leave untouched
+        ? seg
+        : seg
+            .replace(/\\\[([\s\S]*?)\\\]/g, (_, m: string) => block(m))
+            // trim: remark-math rejects inline math padded with spaces ($ x $)
+            .replace(/\\\(([\s\S]*?)\\\)/g, (_, m: string) => `$${m.trim()}$`)
+            .replace(/\$\$([^\n$]+?)\$\$/g, (_, m: string) => block(m))
+    )
+    .join("")
 }
 
 function CodeBlock({ children }: { children?: ReactNode }) {
@@ -130,11 +152,14 @@ export default memo(function MarkdownImpl({
   const rehypePlugins = useMemo(
     () => [
       rehypeHighlight,
-      rehypeKatex,
+      // strict: false — models emit unicode/loose LaTeX that pedantic KaTeX
+      // would reject; render errors show inline in red instead of throwing.
+      [rehypeKatex, { strict: false }] as never,
       ...(sources?.length ? [makeCitationPlugin(sources)] : []),
     ],
     [sources]
   )
+  const normalized = useMemo(() => normalizeMath(text), [text])
   return (
     <div
       className={cn(
@@ -150,7 +175,7 @@ export default memo(function MarkdownImpl({
           a: (props) => <a {...props} target="_blank" rel="noreferrer" />,
         }}
       >
-        {text}
+        {normalized}
       </ReactMarkdown>
     </div>
   )

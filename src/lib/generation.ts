@@ -175,13 +175,22 @@ async function userContent(m: Message): Promise<string | ContentPart[]> {
   return [{ type: "text", text }, ...imageParts]
 }
 
+// Tell the model what the chat can render, so it actually uses it.
+const RENDERING_PROMPT =
+  "Rendering: replies are displayed as GitHub-flavored Markdown (tables, task lists, fenced code blocks with syntax highlighting). " +
+  "LaTeX math renders with KaTeX — inline as \\( ... \\) or $...$, display equations as \\[ ... \\] or $$...$$ on their own lines; " +
+  "the mhchem extension (\\ce{...}, \\pu{...}) is available for chemistry. Use LaTeX for all mathematical notation instead of plain text or unicode."
+
 async function buildContext(convId: string, uptoSeq: number): Promise<ChatMessage[]> {
   const conv = await db.conversations.get(convId)
   const rows = await db.messages.where("convId").equals(convId).sortBy("seq")
   const context: ChatMessage[] = []
 
-  const systemPrompt = conv?.systemPrompt ?? getPrefs().globalSystemPrompt
-  if (systemPrompt?.trim()) context.push({ role: "system", content: systemPrompt })
+  const systemPrompt = (conv?.systemPrompt ?? getPrefs().globalSystemPrompt)?.trim()
+  context.push({
+    role: "system",
+    content: systemPrompt ? `${systemPrompt}\n\n${RENDERING_PROMPT}` : RENDERING_PROMPT,
+  })
 
   for (const m of rows) {
     if (m.seq >= uptoSeq) break
